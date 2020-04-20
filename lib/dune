@@ -1,0 +1,5 @@
+(library
+ (name raft)
+ (public_name mirage-raft)
+ (libraries lwt mirage-time-lwt duration)
+ (modules_without_implementation plog append_entries request_votes))
