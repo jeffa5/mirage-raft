@@ -40,7 +40,7 @@ module type AE = sig
 end
 
 (* main event loop which listens for rpc's and performs relevant actions to update the state machine *)
-module Make (Time : Mirage_time_lwt.S) (Ae : AE) = struct
+module Make (Time : Mirage_time.S) (Ae : AE) = struct
   module Leader = Leader.Make (Ae)
 
   let handle (t : t) =
