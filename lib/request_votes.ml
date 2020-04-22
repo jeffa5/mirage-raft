@@ -8,7 +8,7 @@ module type S = sig
 
   type res = { term : int; vote_granted : bool }
 
-  val f : args -> res
+  val f : args -> res Lwt.t
   (** [request_votes] is invoked by candidates to gather votes
  *
  *  Arguments
