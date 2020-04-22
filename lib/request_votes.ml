@@ -8,7 +8,7 @@ module type S = sig
 
   type res = { term : int; vote_granted : bool }
 
-  val f : args -> res Lwt.t
+  val send : args -> res Lwt.t
   (** [request_votes] is invoked by candidates to gather votes
  *
  *  Arguments
@@ -21,4 +21,7 @@ module type S = sig
  *  - [term]: current term, for candidate to update itself
  *  - [vote_granted]: true means candidate received vote
  * *)
+
+  val recv : unit -> (args * res Lwt_mvar.t) Lwt.t
+  (** [recv ()] returns an Lwt thread which waits to receive communication from peers *)
 end

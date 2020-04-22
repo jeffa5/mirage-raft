@@ -18,7 +18,7 @@ struct
         leader_commit = s.volatile.commit_index;
       }
     in
-    let* hb = Ae.f ae_args in
+    let* hb = Ae.send ae_args in
     if hb.term > s.persistent.current_term then
       let s : S.state = { volatile = s.volatile; persistent = s.persistent } in
       Lwt.return @@ S.Follower s

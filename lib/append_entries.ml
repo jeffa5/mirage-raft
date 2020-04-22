@@ -12,7 +12,7 @@ module type S = sig
 
   type res = { term : int; success : bool }
 
-  val f : args -> res Lwt.t
+  val send : args -> res Lwt.t
   (** [append_entries] is invoked by leader to replicate log entries; also used as heartbeat.
  *
  *  Arguments
@@ -27,4 +27,7 @@ module type S = sig
  *  - [term]: current term, for leader to update itself
  *  - [success]: true if follower contained entry matching [prev_log_index] and [prev_log_term]
  * *)
+
+  val recv : unit -> (args * res Lwt_mvar.t) Lwt.t
+  (** [recv ()] returns an Lwt thread which waits to receive communication from peers *)
 end

@@ -14,25 +14,15 @@ struct
   module Candidate = Candidate.Make (P) (S)
   module Follower = Follower.Make (P) (S) (Ae) (Rv)
 
-  type t = {
-    id : int;
-    peer_ids : int list;
-    state : S.t;
-    ae_stream : (Ae.args * Ae.res Lwt_mvar.t) Lwt_stream.t;
-    rv_stream : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
-  }
+  type t = { id : int; peer_ids : int list; state : S.t }
 
   let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) id peer_ids =
-    let ae_stream, push_ae = Lwt_stream.create () in
-    let rv_stream, push_rv = Lwt_stream.create () in
     let initial_state : S.state =
       let persistent : S.persistent = { current_term; voted_for; log } in
       let volatile : S.volatile = { commit_index = 0; last_applied = 0 } in
       { persistent; volatile }
     in
-    ( { id; peer_ids; state = S.Follower initial_state; ae_stream; rv_stream },
-      push_ae,
-      push_rv )
+    { id; peer_ids; state = S.Follower initial_state }
 
   let handle (t : t) =
     (* events is the stream where all events come through, i.e.
@@ -49,8 +39,8 @@ struct
           `Timeout
         in
         let get_ae =
-          let+ ae = Lwt_stream.get t.ae_stream in
-          match ae with None -> assert false | Some ae -> `AppendEntries ae
+          let+ ae = Ae.recv () in
+          `AppendEntries ae
         in
         let* event = Lwt.pick [ election_timeout; get_ae ] in
         push_event (Some event);
@@ -63,12 +53,9 @@ struct
     (* receives the call to request votes and pushes the event to events *)
     let request_votes () =
       let rec loop () =
-        let* rv = Lwt_stream.get t.rv_stream in
-        match rv with
-        | None -> Lwt.return_unit
-        | Some rv ->
-            push_event (Some (`RequestVotes rv));
-            loop ()
+        let* rv = Rv.recv () in
+        push_event (Some (`RequestVotes rv));
+        loop ()
       in
       loop ()
     in
