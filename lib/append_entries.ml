@@ -1,16 +1,19 @@
-type args = {
-  term : int;
-  leader_id : int;
-  prev_log_index : int;
-  prev_log_term : int;
-  entries : Plog.entry list;
-  leader_commit : int;
-}
+module type S = sig
+  type plog_entry
 
-type res = { term : int; success : bool }
+  type args = {
+    term : int;
+    leader_id : int;
+    prev_log_index : int;
+    prev_log_term : int;
+    entries : plog_entry list;
+    leader_commit : int;
+  }
 
-val f : args -> res
-(** [append_entries] is invoked by leader to replicate log entries; also used as heartbeat.
+  type res = { term : int; success : bool }
+
+  val f : args -> res Lwt.t
+  (** [append_entries] is invoked by leader to replicate log entries; also used as heartbeat.
  *
  *  Arguments
  *  - [term]: leader's term
@@ -24,3 +27,4 @@ val f : args -> res
  *  - [term]: current term, for leader to update itself
  *  - [success]: true if follower contained entry matching [prev_log_index] and [prev_log_term]
  * *)
+end

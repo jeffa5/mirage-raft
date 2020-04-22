@@ -1,14 +1,15 @@
-type args = {
-  term : int;
-  candidate_id : int;
-  last_log_index : int;
-  last_log_term : int;
-}
+module type S = sig
+  type args = {
+    term : int;
+    candidate_id : int;
+    last_log_index : int;
+    last_log_term : int;
+  }
 
-type res = { term : int; vote_granted : bool }
+  type res = { term : int; vote_granted : bool }
 
-val f : args -> res
-(** [request_votes] is invoked by candidates to gather votes
+  val f : args -> res
+  (** [request_votes] is invoked by candidates to gather votes
  *
  *  Arguments
  *  - [term]: candidate's term
@@ -20,3 +21,4 @@ val f : args -> res
  *  - [term]: current term, for candidate to update itself
  *  - [vote_granted]: true means candidate received vote
  * *)
+end
