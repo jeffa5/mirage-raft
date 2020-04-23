@@ -7,7 +7,12 @@ module Make
     (P : Plog.S)
     (S : State.S with type plog := P.t)
     (Ae : Append_entries.S with type plog_entry := P.entry)
-    (Rv : Request_votes.S) =
+    (Rv : Request_votes.S)
+    (Ev : Event.S
+            with type ae_arg = Ae.args
+             and type ae_res = Ae.res
+             and type rv_arg = Rv.args
+             and type rv_res = Rv.res) =
 struct
   let handle_request_votes (s : S.state) (rv, m) =
     let rv : Rv.args = rv in
@@ -95,12 +100,14 @@ struct
 
   let handle s event =
     match event with
-    | `Timeout -> Lwt.return @@ S.Candidate s
-    | `SendHeartbeat -> Lwt.return @@ S.Follower s
-    | `AppendEntries ae ->
+    | Ev.Timeout -> Lwt.return @@ S.Candidate s
+    | Ev.SendHeartbeat -> Lwt.return @@ S.Follower s
+    | Ev.AppendEntriesRequest ae ->
         let+ s = handle_append_entries s ae in
         S.Follower s
-    | `RequestVotes rv ->
+    | Ev.AppendEntriesResponse _ -> assert false
+    | Ev.RequestVotesRequest rv ->
         let+ s = handle_request_votes s rv in
         S.Follower s
+    | Ev.RequestVotesResponse _ -> assert false
 end

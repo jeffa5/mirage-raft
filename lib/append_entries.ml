@@ -12,7 +12,7 @@ module type S = sig
 
   type res = { term : int; success : bool }
 
-  val send : args -> res Lwt.t
+  val broadcast : args -> unit Lwt.t
   (** [append_entries] is invoked by leader to replicate log entries; also used as heartbeat.
  *
  *  Arguments

@@ -2,7 +2,8 @@ let ( let* ) = Lwt.bind
 
 let ( let+ ) a b = Lwt.map b a
 
-module Make (P : Plog.S) (S : State.S with type plog := P.t) = struct
+module Make (P : Plog.S) (S : State.S with type plog := P.t) (Ev : Event.S) =
+struct
   let handle_append_entries (s : S.state) _ae = Lwt.return @@ S.Follower s
 
   let handle_request_votes (s : S.state) _rv = Lwt.return @@ S.Follower s
@@ -18,10 +19,12 @@ module Make (P : Plog.S) (S : State.S with type plog := P.t) = struct
     (* discovers current leader or new term (-> follower) *)
     (* receives votes from majority of servers ( -> leader )*)
     match event with
-    | `Timeout ->
+    | Ev.Timeout ->
         Lwt.return
         @@ S.Candidate { volatile = s.volatile; persistent = s.persistent }
-    | `SendHeartbeat -> Lwt.return @@ S.Candidate s
-    | `AppendEntries ae -> handle_append_entries s ae
-    | `RequestVotes rv -> handle_request_votes s rv
+    | Ev.SendHeartbeat -> Lwt.return @@ S.Candidate s
+    | Ev.AppendEntriesRequest ae -> handle_append_entries s ae
+    | Ev.AppendEntriesResponse _ -> assert false
+    | Ev.RequestVotesRequest rv -> handle_request_votes s rv
+    | Ev.RequestVotesResponse _ -> assert false
 end
