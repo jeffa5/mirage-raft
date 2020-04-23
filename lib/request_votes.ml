@@ -21,7 +21,4 @@ module type S = sig
  *  - [term]: current term, for candidate to update itself
  *  - [vote_granted]: true means candidate received vote
  * *)
-
-  val recv : unit -> (args * res Lwt_mvar.t) Lwt.t
-  (** [recv ()] returns an Lwt thread which waits to receive communication from peers *)
 end

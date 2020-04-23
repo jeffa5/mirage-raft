@@ -20,15 +20,22 @@ struct
     | `AppendEntries (_, _) -> "appendentries"
     | `RequestVotes (_, _) -> "requestvotes"
 
-  type t = { id : int; peer_ids : int list; state : S.t }
+  type t = {
+    id : int;
+    peer_ids : int list;
+    state : S.t;
+    ae_stream : (Ae.args * Ae.res Lwt_mvar.t) Lwt_stream.t;
+    rv_stream : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
+  }
 
-  let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) id peer_ids =
+  let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) ae_stream
+      rv_stream id peer_ids =
     let initial_state : S.state =
       let persistent : S.persistent = { current_term; voted_for; log } in
       let volatile : S.volatile = { commit_index = 0; last_applied = 0 } in
       { persistent; volatile }
     in
-    { id; peer_ids; state = S.Follower initial_state }
+    { id; peer_ids; state = S.Follower initial_state; ae_stream; rv_stream }
 
   let handle (t : t) =
     let* () = Logs_lwt.info (fun f -> f "Starting raft") in
@@ -43,15 +50,18 @@ struct
       let rec loop () =
         let election_timeout =
           let+ () = Time.sleep_ns (Duration.of_sec 1) in
-          `Timeout
+          Some `Timeout
         in
         let get_ae =
-          let+ ae = Ae.recv () in
-          `AppendEntries ae
+          let+ ae = Lwt_stream.get t.ae_stream in
+          match ae with None -> None | Some ae -> Some (`AppendEntries ae)
         in
         let* event = Lwt.pick [ election_timeout; get_ae ] in
-        push_event (Some event);
-        loop ()
+        match event with
+        | None -> Lwt.return_unit
+        | Some event ->
+            push_event (Some event);
+            loop ()
       in
       loop ()
     in
@@ -60,9 +70,12 @@ struct
     (* receives the call to request votes and pushes the event to events *)
     let request_votes () =
       let rec loop () =
-        let* rv = Rv.recv () in
-        push_event (Some (`RequestVotes rv));
-        loop ()
+        let* rv = Lwt_stream.get t.rv_stream in
+        match rv with
+        | None -> Lwt.return_unit
+        | Some rv ->
+            push_event (Some (`RequestVotes rv));
+            loop ()
       in
       loop ()
     in
