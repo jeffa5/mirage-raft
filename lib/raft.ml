@@ -14,6 +14,12 @@ struct
   module Candidate = Candidate.Make (P) (S)
   module Follower = Follower.Make (P) (S) (Ae) (Rv)
 
+  let event_to_string = function
+    | `Timeout -> "timeout"
+    | `SendHeartbeat -> "sendheartbeat"
+    | `AppendEntries (_, _) -> "appendentries"
+    | `RequestVotes (_, _) -> "requestvotes"
+
   type t = { id : int; peer_ids : int list; state : S.t }
 
   let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) id peer_ids =
@@ -25,6 +31,7 @@ struct
     { id; peer_ids; state = S.Follower initial_state }
 
   let handle (t : t) =
+    let* () = Logs_lwt.info (fun f -> f "Starting raft") in
     (* events is the stream where all events come through, i.e.
      * Timeouts
      * Append Entries requests
@@ -77,6 +84,10 @@ struct
       match event with
       | None -> Lwt.return_unit
       | Some event ->
+          let* () =
+            Logs_lwt.info (fun f ->
+                f "Received event %s" (event_to_string event))
+          in
           let* s =
             match s with
             | S.Follower s -> Follower.handle s event

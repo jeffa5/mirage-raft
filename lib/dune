@@ -1,4 +1,4 @@
 (library
  (name mirage_raft)
  (public_name mirage-raft)
- (libraries lwt mirage-time duration))
+ (libraries lwt mirage-time duration logs.lwt))
