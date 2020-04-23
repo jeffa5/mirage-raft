@@ -133,6 +133,9 @@ struct
           let* () =
             Logs_lwt.info (fun f -> f "Received event %s" (Ev.string event))
           in
+          let* () =
+            Logs_lwt.info (fun f -> f "Current state %s" (S.string s))
+          in
           let* s =
             match s with
             | S.Follower s -> Follower.handle s event

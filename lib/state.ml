@@ -44,6 +44,8 @@ module type S = sig
   type state = { persistent : persistent; volatile : volatile }
 
   type t = Leader of leader_state | Candidate of state | Follower of state
+
+  val string : t -> string
 end
 
 module Make (P : Plog.S) : S with type plog := P.t = struct
@@ -92,4 +94,9 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
   type state = { persistent : persistent; volatile : volatile }
 
   type t = Leader of leader_state | Candidate of state | Follower of state
+
+  let string = function
+    | Leader _ -> "leader"
+    | Candidate _ -> "candidate"
+    | Follower _ -> "follower"
 end
