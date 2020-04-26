@@ -155,7 +155,17 @@ struct
             | S.Candidate s -> Lwt.return @@ Candidate.handle s event
             | S.Leader ls -> Lwt.return @@ Leader.handle ls event
           in
-          let* () = Lwt_list.iter_s handle_action actions in
+          let* () =
+            Lwt_list.iter_s
+              (fun a ->
+                let* () =
+                  Logs_lwt.info (fun f ->
+                      f "Received action %s and new state %s" (Ac.string a)
+                        (S.string s))
+                in
+                handle_action a)
+              actions
+          in
           loop s
     in
     loop t.state
