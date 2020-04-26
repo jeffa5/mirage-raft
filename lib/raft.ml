@@ -140,6 +140,10 @@ struct
     in
     Lwt.async heartbeat_ticker;
 
+    let state_tag = Logs.Tag.def "state" ~doc:"Current state" S.pp in
+    let event_tag = Logs.Tag.def "event" ~doc:"Event received" Ev.pp in
+    let action_tag = Logs.Tag.def "action" ~doc:"Action processing" Ac.pp in
+
     let rec loop s =
       let* event = Lwt_stream.get events in
       match event with
@@ -147,7 +151,9 @@ struct
       | Some event ->
           let* () =
             Logs_lwt.info (fun f ->
-                f "Received event %a in state %a" Ev.pp event S.pp s)
+                f "Handling event"
+                  ~tags:
+                    Logs.Tag.(empty |> add event_tag event |> add state_tag s))
           in
           let* s, actions =
             match s with
@@ -160,7 +166,10 @@ struct
               (fun a ->
                 let* () =
                   Logs_lwt.info (fun f ->
-                      f "Received action %a and new state %a" Ac.pp a S.pp s)
+                      f "Processing action"
+                        ~tags:
+                          Logs.Tag.(
+                            empty |> add action_tag a |> add state_tag s))
                 in
                 handle_action a)
               actions

@@ -1,11 +1,11 @@
 module type S = sig
-  type ae_arg [@@deriving show]
+  type ae_arg [@@deriving show { with_path = false }]
 
-  type ae_res [@@deriving show]
+  type ae_res [@@deriving show { with_path = false }]
 
-  type rv_arg [@@deriving show]
+  type rv_arg [@@deriving show { with_path = false }]
 
-  type rv_res [@@deriving show]
+  type rv_res [@@deriving show { with_path = false }]
 
   type t =
     | Timeout
@@ -14,17 +14,17 @@ module type S = sig
     | AppendEntriesResponse of ae_res
     | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVotesResponse of rv_res
-  [@@deriving show]
+  [@@deriving show { with_path = false }]
 end
 
 module Make (Ae : Append_entries.S) (Rv : Request_votes.S) = struct
-  type ae_arg = Ae.args [@@deriving show]
+  type ae_arg = Ae.args [@@deriving show { with_path = false }]
 
-  type ae_res = Ae.res [@@deriving show]
+  type ae_res = Ae.res [@@deriving show { with_path = false }]
 
-  type rv_arg = Rv.args [@@deriving show]
+  type rv_arg = Rv.args [@@deriving show { with_path = false }]
 
-  type rv_res = Rv.res [@@deriving show]
+  type rv_res = Rv.res [@@deriving show { with_path = false }]
 
   type t =
     | Timeout
@@ -33,5 +33,5 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) = struct
     | AppendEntriesResponse of ae_res
     | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVotesResponse of rv_res
-  [@@deriving show]
+  [@@deriving show { with_path = false }]
 end
