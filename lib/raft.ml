@@ -135,10 +135,8 @@ struct
       | None -> Lwt.return_unit
       | Some event ->
           let* () =
-            Logs_lwt.info (fun f -> f "Received event %s" (Ev.string event))
-          in
-          let* () =
-            Logs_lwt.info (fun f -> f "Current state %s" (S.string s))
+            Logs_lwt.info (fun f ->
+                f "Received event %s in state %s" (Ev.string event) (S.string s))
           in
           let* s, actions =
             match s with

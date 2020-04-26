@@ -91,13 +91,6 @@ struct
     let s = { s with volatile } in
     Lwt.return (S.Follower s, [ Ac.AppendEntriesResponse (resp, m) ])
 
-  (* start the election timer *)
-  (* start a thread waiting on the stream *)
-  (* pick between these two threads and whichever completes first dictates what we do next *)
-
-  (* handle rpcs from other servers *)
-  (* start election timer on append entries listener *)
-
   let handle s event =
     match event with
     | Ev.Timeout -> Lwt.return @@ (S.Candidate s, [])
