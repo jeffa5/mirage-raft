@@ -9,7 +9,7 @@ module type S = sig
 
   type res = { term : int; vote_granted : bool } [@@deriving show]
 
-  val broadcast : args -> unit Lwt.t
+  val send : Uri.t -> args -> unit Lwt.t
   (** [request_votes] is invoked by candidates to gather votes
  *
  *  Arguments

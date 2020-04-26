@@ -22,9 +22,9 @@ struct
   }
 
   let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) ae_requests
-      ae_responses rv_requests rv_responses id peer_ids =
+      ae_responses rv_requests rv_responses id peers =
     let initial_state =
-      let server = S.make_server ~self_id:id ~peers:peer_ids () in
+      let server = S.make_server ~self_id:id ~peers () in
       let persistent = S.make_persistent ~current_term ?voted_for ~log () in
       let volatile = S.make_volatile () in
       S.make_state ~server ~persistent ~volatile
@@ -39,10 +39,12 @@ struct
 
   let reset_election_timeout = Lwt_mvar.create_empty ()
 
-  let handle_action = function
-    | Ac.AppendEntriesRequest args -> Ae.broadcast args
+  let handle_action (s : S.server) = function
+    | Ac.AppendEntriesRequest args ->
+        Lwt_list.iter_s (fun (_, uri) -> Ae.send uri args) s.peers
     | Ac.AppendEntriesResponse (res, mvar) -> Lwt_mvar.put mvar res
-    | Ac.RequestVotesRequest args -> Rv.broadcast args
+    | Ac.RequestVotesRequest args ->
+        Lwt_list.iter_s (fun (_, uri) -> Rv.send uri args) s.peers
     | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.ResetElectionTimer -> Lwt_mvar.put reset_election_timeout ()
 
@@ -171,7 +173,11 @@ struct
                           Logs.Tag.(
                             empty |> add action_tag a |> add state_tag s))
                 in
-                handle_action a)
+                handle_action
+                  ( match s with
+                  | S.Follower s | S.Candidate s -> s.server
+                  | S.Leader s -> s.server )
+                  a)
               actions
           in
           loop s

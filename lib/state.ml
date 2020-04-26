@@ -2,7 +2,7 @@ module type S = sig
   type server = {
     votes_received : int; [@default 0]
     self_id : int;
-    peers : int list;
+    peers : (int * Uri.t) list;
   }
   [@@deriving make, show { with_path = false }]
 
@@ -64,7 +64,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
   type server = {
     votes_received : int; [@default 0]
     self_id : int;
-    peers : int list;
+    peers : (int * Uri.t) list;
   }
   [@@deriving make, show { with_path = false }]
 
