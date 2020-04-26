@@ -1,45 +1,37 @@
 module type S = sig
-  type ae_arg
+  type ae_arg [@@deriving show]
 
-  type ae_res
+  type ae_res [@@deriving show]
 
-  type rv_arg
+  type rv_arg [@@deriving show]
 
-  type rv_res
+  type rv_res [@@deriving show]
 
   type t =
     | Timeout
     | SendHeartbeat
-    | AppendEntriesRequest of (ae_arg * ae_res Lwt_mvar.t)
+    | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of ae_res
-    | RequestVotesRequest of (rv_arg * rv_res Lwt_mvar.t)
+    | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVotesResponse of rv_res
-
-  val string : t -> string
+  [@@deriving show]
 end
 
 module Make (Ae : Append_entries.S) (Rv : Request_votes.S) = struct
-  type ae_arg = Ae.args
+  type ae_arg = Ae.args [@@deriving show]
 
-  type ae_res = Ae.res
+  type ae_res = Ae.res [@@deriving show]
 
-  type rv_arg = Rv.args
+  type rv_arg = Rv.args [@@deriving show]
 
-  type rv_res = Rv.res
+  type rv_res = Rv.res [@@deriving show]
 
   type t =
     | Timeout
     | SendHeartbeat
-    | AppendEntriesRequest of (ae_arg * ae_res Lwt_mvar.t)
+    | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of ae_res
-    | RequestVotesRequest of (rv_arg * rv_res Lwt_mvar.t)
+    | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVotesResponse of rv_res
-
-  let string = function
-    | Timeout -> "timeout"
-    | SendHeartbeat -> "sendheartbeat"
-    | AppendEntriesRequest (_, _) -> "appendentriesrequest"
-    | AppendEntriesResponse _ -> "appendentriesresponse"
-    | RequestVotesRequest (_, _) -> "requestvotesrequest"
-    | RequestVotesResponse _ -> "requestvotesresponse"
+  [@@deriving show]
 end

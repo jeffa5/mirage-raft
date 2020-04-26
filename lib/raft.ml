@@ -147,7 +147,7 @@ struct
       | Some event ->
           let* () =
             Logs_lwt.info (fun f ->
-                f "Received event %s in state %s" (Ev.string event) (S.string s))
+                f "Received event %a in state %a" Ev.pp event S.pp s)
           in
           let* s, actions =
             match s with
@@ -160,8 +160,7 @@ struct
               (fun a ->
                 let* () =
                   Logs_lwt.info (fun f ->
-                      f "Received action %s and new state %s" (Ac.string a)
-                        (S.string s))
+                      f "Received action %a and new state %a" Ac.pp a S.pp s)
                 in
                 handle_action a)
               actions

@@ -1,9 +1,9 @@
 (** persistent log *)
 
 module type S = sig
-  type t
+  type t [@@deriving show]
 
-  type entry = { term : int; content : string }
+  type entry = { term : int; content : string } [@@deriving show]
 
   val empty : t
 

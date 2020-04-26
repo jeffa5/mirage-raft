@@ -5,8 +5,9 @@ module type S = sig
     last_log_index : int;
     last_log_term : int;
   }
+  [@@deriving show]
 
-  type res = { term : int; vote_granted : bool }
+  type res = { term : int; vote_granted : bool } [@@deriving show]
 
   val broadcast : args -> unit Lwt.t
   (** [request_votes] is invoked by candidates to gather votes

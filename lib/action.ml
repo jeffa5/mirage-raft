@@ -1,20 +1,19 @@
 module type S = sig
-  type ae_arg
+  type ae_arg [@@deriving show]
 
-  type ae_res
+  type ae_res [@@deriving show]
 
-  type rv_arg
+  type rv_arg [@@deriving show]
 
-  type rv_res
+  type rv_res [@@deriving show]
 
   type t =
     | AppendEntriesRequest of ae_arg
-    | AppendEntriesResponse of (ae_res * ae_res Lwt_mvar.t)
+    | AppendEntriesResponse of (ae_res * (ae_res Lwt_mvar.t[@opaque]))
     | RequestVotesRequest of rv_arg
-    | RequestVotesResponse of (rv_res * rv_res Lwt_mvar.t)
+    | RequestVotesResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
     | ResetElectionTimer
-
-  val string : t -> string
+  [@@deriving show]
 end
 
 module Make (Ae : Append_entries.S) (Rv : Request_votes.S) :
@@ -23,25 +22,19 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) :
      and type ae_res = Ae.res
      and type rv_arg = Rv.args
      and type rv_res = Rv.res = struct
-  type ae_arg = Ae.args
+  type ae_arg = Ae.args [@@deriving show]
 
-  type ae_res = Ae.res
+  type ae_res = Ae.res [@@deriving show]
 
-  type rv_arg = Rv.args
+  type rv_arg = Rv.args [@@deriving show]
 
-  type rv_res = Rv.res
+  type rv_res = Rv.res [@@deriving show]
 
   type t =
     | AppendEntriesRequest of ae_arg
-    | AppendEntriesResponse of (ae_res * ae_res Lwt_mvar.t)
+    | AppendEntriesResponse of (ae_res * (ae_res Lwt_mvar.t[@opaque]))
     | RequestVotesRequest of rv_arg
-    | RequestVotesResponse of (rv_res * rv_res Lwt_mvar.t)
+    | RequestVotesResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
     | ResetElectionTimer
-
-  let string = function
-    | AppendEntriesRequest _ -> "appendentriesrequest"
-    | AppendEntriesResponse _ -> "appendentriesresponse"
-    | RequestVotesRequest _ -> "requestvotesrequest"
-    | RequestVotesResponse _ -> "requestvotesresponse"
-    | ResetElectionTimer -> "resetelectiontimer"
+  [@@deriving show]
 end
