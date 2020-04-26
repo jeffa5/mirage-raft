@@ -41,10 +41,16 @@ struct
 
   let handle_action (s : S.server) = function
     | Ac.AppendEntriesRequest args ->
-        Lwt_list.iter_s (fun (_, uri) -> Ae.send uri args) s.peers
+        List.iter
+          (fun (_, uri) -> Lwt.async (fun () -> Ae.send uri args))
+          s.peers
+        |> Lwt.return
     | Ac.AppendEntriesResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.RequestVotesRequest args ->
-        Lwt_list.iter_s (fun (_, uri) -> Rv.send uri args) s.peers
+        List.iter
+          (fun (_, uri) -> Lwt.async (fun () -> Rv.send uri args))
+          s.peers
+        |> Lwt.return
     | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.ResetElectionTimer -> Lwt_mvar.put reset_election_timeout ()
 
