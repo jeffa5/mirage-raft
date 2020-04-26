@@ -23,13 +23,11 @@ struct
 
   let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) ae_requests
       ae_responses rv_requests rv_responses id peer_ids =
-    let initial_state : S.state =
-      let server : S.server =
-        { self_id = id; peers = peer_ids; votes_received = 0 }
-      in
-      let persistent : S.persistent = { current_term; voted_for; log } in
-      let volatile : S.volatile = { commit_index = 0; last_applied = 0 } in
-      { server; persistent; volatile }
+    let initial_state =
+      let server = S.make_server ~self_id:id ~peers:peer_ids () in
+      let persistent = S.make_persistent ~current_term ?voted_for ~log () in
+      let volatile = S.make_volatile () in
+      S.make_state ~server ~persistent ~volatile
     in
     {
       state = S.Follower initial_state;

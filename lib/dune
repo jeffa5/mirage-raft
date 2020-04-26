@@ -1,4 +1,6 @@
 (library
  (name mirage_raft)
  (public_name mirage-raft)
+ (preprocess
+  (pps ppx_deriving.make))
  (libraries lwt mirage-time duration logs.lwt))

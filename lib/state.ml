@@ -1,5 +1,10 @@
 module type S = sig
-  type server = { votes_received : int; self_id : int; peers : int list }
+  type server = {
+    votes_received : int; [@default 0]
+    self_id : int;
+    peers : int list;
+  }
+  [@@deriving make]
 
   type plog
   (** Persistent state on all servers
@@ -15,15 +20,17 @@ module type S = sig
     log : plog;
         (** log entries; each entry contains command for state machine and term when entry was received by leader (first index is 1) *)
   }
+  [@@deriving make]
 
   (** Volatile state on all servers *)
 
   type volatile = {
-    commit_index : int;
+    commit_index : int; [@default 0]
         (** index of highest log entry known to be committed (initialised to 0, increases monotonically) *)
-    last_applied : int;
+    last_applied : int; [@default 0]
         (** index of highest log entry applied to state machine (initialised to 0, increases monotonically) *)
   }
+  [@@deriving make]
 
   (** Volatile state on leaders
  *
@@ -36,6 +43,7 @@ module type S = sig
     match_index : int list;
         (** for each server, index of highest log entry known to be replicated on server (initialised to 0, increases monotonically) *)
   }
+  [@@deriving make]
 
   type leader_state = {
     server : server;
@@ -43,8 +51,10 @@ module type S = sig
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
+  [@@deriving make]
 
   type state = { server : server; persistent : persistent; volatile : volatile }
+  [@@deriving make]
 
   type t = Leader of leader_state | Candidate of state | Follower of state
 
@@ -52,7 +62,12 @@ module type S = sig
 end
 
 module Make (P : Plog.S) : S with type plog := P.t = struct
-  type server = { votes_received : int; self_id : int; peers : int list }
+  type server = {
+    votes_received : int; [@default 0]
+    self_id : int;
+    peers : int list;
+  }
+  [@@deriving make]
 
   type plog = P.t
   (** Persistent state on all servers
@@ -68,15 +83,17 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
     log : plog;
         (** log entries; each entry contains command for state machine and term when entry was received by leader (first index is 1) *)
   }
+  [@@deriving make]
 
   (** Volatile state on all servers *)
 
   type volatile = {
-    commit_index : int;
+    commit_index : int; [@default 0]
         (** index of highest log entry known to be committed (initialised to 0, increases monotonically) *)
-    last_applied : int;
+    last_applied : int; [@default 0]
         (** index of highest log entry applied to state machine (initialised to 0, increases monotonically) *)
   }
+  [@@deriving make]
 
   (** Volatile state on leaders
  *
@@ -89,6 +106,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
     match_index : int list;
         (** for each server, index of highest log entry known to be replicated on server (initialised to 0, increases monotonically) *)
   }
+  [@@deriving make]
 
   type leader_state = {
     server : server;
@@ -96,8 +114,10 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
+  [@@deriving make]
 
   type state = { server : server; persistent : persistent; volatile : volatile }
+  [@@deriving make]
 
   type t = Leader of leader_state | Candidate of state | Follower of state
 
