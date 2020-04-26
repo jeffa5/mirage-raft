@@ -2,5 +2,5 @@
  (name mirage_raft)
  (public_name mirage-raft)
  (preprocess
-  (pps ppx_deriving.make ppx_deriving.show))
- (libraries lwt mirage-time duration logs.lwt uri))
+  (pps ppx_deriving.make ppx_sexp_conv))
+ (libraries lwt mirage-time duration sexplib0 logs.lwt uri-sexp))

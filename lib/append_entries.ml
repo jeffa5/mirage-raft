@@ -1,5 +1,5 @@
 module type S = sig
-  type plog_entry [@@deriving show]
+  type plog_entry [@@deriving sexp]
 
   type args = {
     term : int;
@@ -9,11 +9,11 @@ module type S = sig
     entries : plog_entry list;
     leader_commit : int;
   }
-  [@@deriving show]
+  [@@deriving sexp]
 
-  type res = { term : int; success : bool } [@@deriving show]
+  type res = { term : int; success : bool } [@@deriving sexp]
 
-  val send : Uri.t -> args -> unit Lwt.t
+  val send : Uri_sexp.t -> args -> unit Lwt.t
   (** [append_entries] is invoked by leader to replicate log entries; also used as heartbeat.
  *
  *  Arguments

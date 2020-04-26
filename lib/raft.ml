@@ -142,9 +142,18 @@ struct
     in
     Lwt.async heartbeat_ticker;
 
-    let state_tag = Logs.Tag.def "state" ~doc:"Current state" S.pp in
-    let event_tag = Logs.Tag.def "event" ~doc:"Event received" Ev.pp in
-    let action_tag = Logs.Tag.def "action" ~doc:"Action processing" Ac.pp in
+    let state_tag =
+      Logs.Tag.def "state" ~doc:"Current state" (fun f s ->
+          Sexplib0.Sexp.pp f (S.sexp_of_t s))
+    in
+    let event_tag =
+      Logs.Tag.def "event" ~doc:"Event received" (fun f e ->
+          Sexplib0.Sexp.pp f (Ev.sexp_of_t e))
+    in
+    let action_tag =
+      Logs.Tag.def "action" ~doc:"Action processing" (fun f a ->
+          Sexplib0.Sexp.pp f (Ac.sexp_of_t a))
+    in
 
     let rec loop s =
       let* event = Lwt_stream.get events in

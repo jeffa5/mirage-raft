@@ -1,12 +1,14 @@
+open Sexplib0.Sexp_conv
+
 module type S = sig
   type server = {
     votes_received : int; [@default 0]
     self_id : int;
-    peers : (int * Uri.t) list;
+    peers : (int * Uri_sexp.t) list;
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
-  type plog [@@deriving show { with_path = false }]
+  type plog [@@deriving sexp]
   (** Persistent state on all servers
  *
  *  Updated on stable storage before responding to RPCs
@@ -20,7 +22,7 @@ module type S = sig
     log : plog;
         (** log entries; each entry contains command for state machine and term when entry was received by leader (first index is 1) *)
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   (** Volatile state on all servers *)
 
@@ -30,7 +32,7 @@ module type S = sig
     last_applied : int; [@default 0]
         (** index of highest log entry applied to state machine (initialised to 0, increases monotonically) *)
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   (** Volatile state on leaders
  *
@@ -43,7 +45,7 @@ module type S = sig
     match_index : int list;
         (** for each server, index of highest log entry known to be replicated on server (initialised to 0, increases monotonically) *)
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   type leader_state = {
     server : server;
@@ -51,24 +53,24 @@ module type S = sig
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   type state = { server : server; persistent : persistent; volatile : volatile }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   type t = Leader of leader_state | Candidate of state | Follower of state
-  [@@deriving show { with_path = false }]
+  [@@deriving sexp]
 end
 
 module Make (P : Plog.S) : S with type plog := P.t = struct
   type server = {
     votes_received : int; [@default 0]
     self_id : int;
-    peers : (int * Uri.t) list;
+    peers : (int * Uri_sexp.t) list;
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
-  type plog = P.t [@@deriving show { with_path = false }]
+  type plog = P.t [@@deriving sexp]
   (** Persistent state on all servers
  *
  *  Updated on stable storage before responding to RPCs
@@ -82,7 +84,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
     log : plog;
         (** log entries; each entry contains command for state machine and term when entry was received by leader (first index is 1) *)
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   (** Volatile state on all servers *)
 
@@ -92,7 +94,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
     last_applied : int; [@default 0]
         (** index of highest log entry applied to state machine (initialised to 0, increases monotonically) *)
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   (** Volatile state on leaders
  *
@@ -105,7 +107,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
     match_index : int list;
         (** for each server, index of highest log entry known to be replicated on server (initialised to 0, increases monotonically) *)
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   type leader_state = {
     server : server;
@@ -113,11 +115,11 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   type state = { server : server; persistent : persistent; volatile : volatile }
-  [@@deriving make, show { with_path = false }]
+  [@@deriving make, sexp]
 
   type t = Leader of leader_state | Candidate of state | Follower of state
-  [@@deriving show { with_path = false }]
+  [@@deriving sexp]
 end

@@ -5,11 +5,11 @@ module type S = sig
     last_log_index : int;
     last_log_term : int;
   }
-  [@@deriving show]
+  [@@deriving sexp]
 
-  type res = { term : int; vote_granted : bool } [@@deriving show]
+  type res = { term : int; vote_granted : bool } [@@deriving sexp]
 
-  val send : Uri.t -> args -> unit Lwt.t
+  val send : Uri_sexp.t -> args -> unit Lwt.t
   (** [request_votes] is invoked by candidates to gather votes
  *
  *  Arguments
