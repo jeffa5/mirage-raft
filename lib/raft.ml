@@ -14,8 +14,6 @@ struct
   module Follower = Follower.Make (P) (S) (Ae) (Rv) (Ev) (Ac)
 
   type t = {
-    id : int;
-    peer_ids : int list;
     state : S.t;
     ae_requests : (Ae.args * Ae.res Lwt_mvar.t) Lwt_stream.t;
     ae_responses : Ae.res Lwt_stream.t;
@@ -26,13 +24,14 @@ struct
   let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) ae_requests
       ae_responses rv_requests rv_responses id peer_ids =
     let initial_state : S.state =
+      let server : S.server =
+        { self_id = id; peers = peer_ids; votes_received = 0 }
+      in
       let persistent : S.persistent = { current_term; voted_for; log } in
       let volatile : S.volatile = { commit_index = 0; last_applied = 0 } in
-      { persistent; volatile }
+      { server; persistent; volatile }
     in
     {
-      id;
-      peer_ids;
       state = S.Follower initial_state;
       ae_requests;
       ae_responses;
@@ -40,11 +39,14 @@ struct
       rv_responses;
     }
 
+  let reset_election_timeout = Lwt_mvar.create_empty ()
+
   let handle_action = function
     | Ac.AppendEntriesRequest args -> Ae.broadcast args
     | Ac.AppendEntriesResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.RequestVotesRequest args -> Rv.broadcast args
     | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res
+    | Ac.ResetElectionTimer -> Lwt_mvar.put reset_election_timeout ()
 
   let handle (t : t) =
     let* () = Logs_lwt.info (fun f -> f "Starting raft") in
@@ -59,20 +61,31 @@ struct
       let rec loop () =
         let election_timeout =
           let+ () = Time.sleep_ns (Duration.of_sec 1) in
-          Some Ev.Timeout
+          Some (Some Ev.Timeout)
+        in
+        let reset_timeout =
+          let+ () = Lwt_mvar.take reset_election_timeout in
+          Some None
         in
         let get_ae_request =
           let+ ae = Lwt_stream.get t.ae_requests in
           match ae with
           | None -> None
-          | Some ae -> Some (Ev.AppendEntriesRequest ae)
+          | Some ae -> Some (Some (Ev.AppendEntriesRequest ae))
         in
-        let* event = Lwt.pick [ election_timeout; get_ae_request ] in
+        let* event =
+          Lwt.pick [ election_timeout; get_ae_request; reset_timeout ]
+        in
         match event with
         | None -> Lwt.return_unit
-        | Some event ->
-            push_event (Some event);
-            loop ()
+        | Some event -> (
+            match event with
+            | None ->
+                (* received a reset election timout *)
+                loop ()
+            | Some event ->
+                push_event (Some event);
+                loop () )
       in
       loop ()
     in

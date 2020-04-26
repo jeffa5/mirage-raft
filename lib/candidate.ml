@@ -10,7 +10,13 @@ struct
     (* receives votes from majority of servers ( -> leader )*)
     match event with
     | Ev.Timeout ->
-        (S.Candidate { volatile = s.volatile; persistent = s.persistent }, [])
+        ( S.Candidate
+            {
+              server = s.server;
+              volatile = s.volatile;
+              persistent = s.persistent;
+            },
+          [] )
     | Ev.SendHeartbeat -> (S.Candidate s, [])
     | Ev.AppendEntriesRequest ae -> handle_append_entries s ae
     | Ev.AppendEntriesResponse _ -> assert false

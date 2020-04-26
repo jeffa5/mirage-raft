@@ -1,4 +1,6 @@
 module type S = sig
+  type server = { votes_received : int; self_id : int; peers : int list }
+
   type plog
   (** Persistent state on all servers
  *
@@ -36,12 +38,13 @@ module type S = sig
   }
 
   type leader_state = {
+    server : server;
     persistent : persistent;
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
 
-  type state = { persistent : persistent; volatile : volatile }
+  type state = { server : server; persistent : persistent; volatile : volatile }
 
   type t = Leader of leader_state | Candidate of state | Follower of state
 
@@ -49,6 +52,8 @@ module type S = sig
 end
 
 module Make (P : Plog.S) : S with type plog := P.t = struct
+  type server = { votes_received : int; self_id : int; peers : int list }
+
   type plog = P.t
   (** Persistent state on all servers
  *
@@ -86,12 +91,13 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
   }
 
   type leader_state = {
+    server : server;
     persistent : persistent;
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
 
-  type state = { persistent : persistent; volatile : volatile }
+  type state = { server : server; persistent : persistent; volatile : volatile }
 
   type t = Leader of leader_state | Candidate of state | Follower of state
 

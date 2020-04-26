@@ -17,6 +17,27 @@ module Make
              and type rv_arg = Rv.args
              and type rv_res = Rv.res) =
 struct
+  let handle_timeout (s : S.state) =
+    let persistent =
+      {
+        s.persistent with
+        current_term = s.persistent.current_term + 1;
+        voted_for = Some s.server.self_id;
+      }
+    in
+    let server = { s.server with votes_received = 1 } in
+    (* send request votes rpcs *)
+    let s = { s with persistent; server } in
+    let rv_args : Rv.args =
+      {
+        term = s.persistent.current_term;
+        candidate_id = s.server.self_id;
+        last_log_index = 0;
+        last_log_term = 0;
+      }
+    in
+    (S.Candidate s, [ Ac.ResetElectionTimer; Ac.RequestVotesRequest rv_args ])
+
   let handle_request_votes (s : S.state) (rv, m) =
     let rv : Rv.args = rv in
     let vote_granted =
@@ -93,7 +114,7 @@ struct
 
   let handle s event =
     match event with
-    | Ev.Timeout -> Lwt.return @@ (S.Candidate s, [])
+    | Ev.Timeout -> Lwt.return @@ handle_timeout s
     | Ev.SendHeartbeat -> Lwt.return @@ (S.Follower s, [])
     | Ev.AppendEntriesRequest ae -> handle_append_entries s ae
     | Ev.AppendEntriesResponse _ -> assert false

@@ -35,7 +35,13 @@ struct
     (* if there exists an N such that N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term: set commit_index = N *)
     match event with
     | Ev.Timeout ->
-        (S.Candidate { volatile = s.volatile; persistent = s.persistent }, [])
+        ( S.Candidate
+            {
+              server = s.server;
+              volatile = s.volatile;
+              persistent = s.persistent;
+            },
+          [] )
     | Ev.SendHeartbeat -> handle_send_heartbeat s
     | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae
     | Ev.AppendEntriesResponse r -> handle_append_entries_response s r
