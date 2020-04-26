@@ -1,6 +1,4 @@
-let ( let* ) = Lwt.bind
-
-let ( let+ ) a b = Lwt.map b a
+open Lwt.Syntax
 
 (* if voted_for is null  or candidate_id, and candidate's log is at least as up-to-date as receiver's log, grant vote *)
 module Make
@@ -9,6 +7,11 @@ module Make
     (Ae : Append_entries.S with type plog_entry := P.entry)
     (Rv : Request_votes.S)
     (Ev : Event.S
+            with type ae_arg = Ae.args
+             and type ae_res = Ae.res
+             and type rv_arg = Rv.args
+             and type rv_res = Rv.res)
+    (Ac : Action.S
             with type ae_arg = Ae.args
              and type ae_res = Ae.res
              and type rv_arg = Rv.args
@@ -29,11 +32,8 @@ struct
             else true
         | Some _id -> false
     in
-    let+ () =
-      Lwt_mvar.put m
-        ({ term = s.persistent.current_term; vote_granted } : Rv.res)
-    in
-    s
+    let resp = ({ term = s.persistent.current_term; vote_granted } : Rv.res) in
+    Lwt.return (S.Follower s, [ Ac.RequestVotesResponse (resp, m) ])
 
   let handle_append_entries (s : S.state) (ae, m) =
     let ae : Ae.args = ae in
@@ -79,7 +79,6 @@ struct
               Lwt.return
                 ({ term = s.persistent.current_term; success = false } : Ae.res)
     in
-    let* () = Lwt_mvar.put m resp in
     (* if leader_commit > commit_index, set commit_index=min(leader_commit, index of last new entry) *)
     let volatile =
       if ae.leader_commit > s.volatile.commit_index then
@@ -89,7 +88,8 @@ struct
         }
       else s.volatile
     in
-    Lwt.return { s with volatile }
+    let s = { s with volatile } in
+    Lwt.return (S.Follower s, [ Ac.AppendEntriesResponse (resp, m) ])
 
   (* start the election timer *)
   (* start a thread waiting on the stream *)
@@ -100,14 +100,10 @@ struct
 
   let handle s event =
     match event with
-    | Ev.Timeout -> Lwt.return @@ S.Candidate s
-    | Ev.SendHeartbeat -> Lwt.return @@ S.Follower s
-    | Ev.AppendEntriesRequest ae ->
-        let+ s = handle_append_entries s ae in
-        S.Follower s
+    | Ev.Timeout -> Lwt.return @@ (S.Candidate s, [])
+    | Ev.SendHeartbeat -> Lwt.return @@ (S.Follower s, [])
+    | Ev.AppendEntriesRequest ae -> handle_append_entries s ae
     | Ev.AppendEntriesResponse _ -> assert false
-    | Ev.RequestVotesRequest rv ->
-        let+ s = handle_request_votes s rv in
-        S.Follower s
+    | Ev.RequestVotesRequest rv -> handle_request_votes s rv
     | Ev.RequestVotesResponse _ -> assert false
 end

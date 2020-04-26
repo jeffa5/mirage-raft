@@ -1,7 +1,4 @@
-(** main initialisation *)
-let ( let* ) = Lwt.bind
-
-let ( let+ ) a b = Lwt.map b a
+open Lwt.Syntax
 
 module Make
     (Time : Mirage_time.S)
@@ -11,9 +8,10 @@ module Make
 struct
   module S = State.Make (P)
   module Ev = Event.Make (Ae) (Rv)
-  module Leader = Leader.Make (P) (S) (Ae) (Ev)
+  module Ac = Action.Make (Ae) (Rv)
+  module Leader = Leader.Make (P) (S) (Ae) (Ev) (Ac)
   module Candidate = Candidate.Make (P) (S) (Ev)
-  module Follower = Follower.Make (P) (S) (Ae) (Rv) (Ev)
+  module Follower = Follower.Make (P) (S) (Ae) (Rv) (Ev) (Ac)
 
   type t = {
     id : int;
@@ -41,6 +39,12 @@ struct
       rv_requests;
       rv_responses;
     }
+
+  let handle_action = function
+    | Ac.AppendEntriesRequest args -> Ae.broadcast args
+    | Ac.AppendEntriesResponse (res, mvar) -> Lwt_mvar.put mvar res
+    | Ac.RequestVotesRequest args -> Rv.broadcast args
+    | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res
 
   let handle (t : t) =
     let* () = Logs_lwt.info (fun f -> f "Starting raft") in
@@ -136,12 +140,13 @@ struct
           let* () =
             Logs_lwt.info (fun f -> f "Current state %s" (S.string s))
           in
-          let* s =
+          let* s, actions =
             match s with
             | S.Follower s -> Follower.handle s event
-            | S.Candidate s -> Candidate.handle s event
-            | S.Leader ls -> Leader.handle ls event
+            | S.Candidate s -> Lwt.return @@ Candidate.handle s event
+            | S.Leader ls -> Lwt.return @@ Leader.handle ls event
           in
+          let* () = Lwt_list.iter_s handle_action actions in
           loop s
     in
     loop t.state
