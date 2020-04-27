@@ -166,12 +166,20 @@ struct
     in
 
     let rec loop s =
+      let* () =
+        Logs_lwt.info (fun f ->
+            f "In state %s"
+              ( match s with
+              | S.Follower _ -> "follower"
+              | S.Candidate _ -> "candidate"
+              | S.Leader _ -> "leader" ))
+      in
       let* event = Lwt_stream.get events in
       match event with
       | None -> Lwt.return_unit
       | Some event ->
           let* () =
-            Logs_lwt.info (fun f ->
+            Logs_lwt.debug (fun f ->
                 f "Handling event"
                   ~tags:
                     Logs.Tag.(empty |> add event_tag event |> add state_tag s))
@@ -186,7 +194,7 @@ struct
             Lwt_list.iter_s
               (fun a ->
                 let* () =
-                  Logs_lwt.info (fun f ->
+                  Logs_lwt.debug (fun f ->
                       f "Processing action"
                         ~tags:
                           Logs.Tag.(
