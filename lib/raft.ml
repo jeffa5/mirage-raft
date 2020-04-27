@@ -144,7 +144,7 @@ struct
     (* ticker for leader to send heartbeats, can be ignored by others *)
     let heartbeat_ticker () =
       let rec loop () =
-        let* () = Time.sleep_ns (Duration.of_sec 1) in
+        let* () = Time.sleep_ns (Duration.of_ms 100) in
         push_event (Some Ev.SendHeartbeat);
         loop ()
       in
