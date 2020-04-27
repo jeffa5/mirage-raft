@@ -4,14 +4,14 @@ module Make
     (S : State.S with type plog := P.t)
     (Ev : Event.S with type rv_res := Rv.res) =
 struct
-  let handle_append_entries (s : S.candidate) _ae =
+  let handle_append_entries_request (s : S.candidate) _ae =
     let s =
       S.make_follower ~server:s.server ~persistent:s.persistent
         ~volatile:s.volatile
     in
     (S.Follower s, [])
 
-  let handle_request_votes (s : S.candidate) _rv =
+  let handle_request_votes_request (s : S.candidate) _rv =
     let s =
       S.make_follower ~server:s.server ~persistent:s.persistent
         ~volatile:s.volatile
@@ -47,8 +47,8 @@ struct
     match event with
     | Ev.Timeout -> (S.Candidate s, [])
     | Ev.SendHeartbeat -> (S.Candidate s, [])
-    | Ev.AppendEntriesRequest ae -> handle_append_entries s ae
+    | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae
     | Ev.AppendEntriesResponse _ -> assert false
-    | Ev.RequestVotesRequest rv -> handle_request_votes s rv
+    | Ev.RequestVotesRequest rv -> handle_request_votes_request s rv
     | Ev.RequestVotesResponse res -> handle_request_votes_response s res
 end
