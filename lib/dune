@@ -3,4 +3,5 @@
  (public_name mirage-raft)
  (preprocess
   (pps ppx_deriving.make ppx_sexp_conv))
- (libraries lwt mirage-time duration sexplib0 logs.lwt uri-sexp))
+ (libraries lwt mirage-time mirage-random randomconv duration sexplib0
+   logs.lwt uri-sexp))

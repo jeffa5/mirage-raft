@@ -2,6 +2,7 @@ open Lwt.Syntax
 
 module Make
     (Time : Mirage_time.S)
+    (Random : Mirage_random.S)
     (P : Plog.S)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_votes.S) =
@@ -66,7 +67,10 @@ struct
     let append_entries_requests () =
       let rec loop () =
         let election_timeout =
-          let+ () = Time.sleep_ns (Duration.of_sec 1) in
+          let+ () =
+            Time.sleep_ns
+              (Duration.of_ms (150 + Randomconv.int ~bound:151 Random.generate))
+          in
           Some (Some Ev.Timeout)
         in
         let reset_timeout =
