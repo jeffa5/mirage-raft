@@ -5,7 +5,7 @@ module Make
     (Ev : Event.S with type ae_arg = Ae.args and type ae_res = Ae.res)
     (Ac : Action.S with type ae_arg = Ae.args and type ae_res = Ae.res) =
 struct
-  let handle_send_heartbeat (s : S.leader_state) =
+  let handle_send_heartbeat (s : S.leader) =
     let ae_args : Ae.args =
       {
         term = s.persistent.current_term;
@@ -18,15 +18,15 @@ struct
     in
     (S.Leader s, [ Ac.AppendEntriesRequest ae_args ])
 
-  let handle_append_entries_request (s : S.leader_state) _ae = (S.Leader s, [])
+  let handle_append_entries_request (s : S.leader) _ae = (S.Leader s, [])
 
-  let handle_append_entries_response (s : S.leader_state) _r = (S.Leader s, [])
+  let handle_append_entries_response (s : S.leader) _r = (S.Leader s, [])
 
-  let handle_request_votes_request (s : S.leader_state) _rv = (S.Leader s, [])
+  let handle_request_votes_request (s : S.leader) _rv = (S.Leader s, [])
 
-  let handle_request_votes_response (s : S.leader_state) _r = (S.Leader s, [])
+  let handle_request_votes_response (s : S.leader) _r = (S.Leader s, [])
 
-  let handle (s : S.leader_state) event =
+  let handle (s : S.leader) event =
     (* upon election: send initial empty append_entries rpcs (heartbeat) to each server; repeat during idle periods to prevent election timeouts *)
     (* if command received from client: append entry to local log, respond after entry applied to state machine *)
     (* if last_log_index >= next_index for a follower: send append_entries rpc with log entries starting at next_index *)

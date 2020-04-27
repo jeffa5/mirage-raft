@@ -17,7 +17,7 @@ module Make
              and type rv_arg = Rv.args
              and type rv_res = Rv.res) =
 struct
-  let handle_timeout (s : S.state) =
+  let handle_timeout (s : S.follower) =
     let persistent =
       {
         s.persistent with
@@ -27,7 +27,7 @@ struct
     in
     let server = { s.server with votes_received = 1 } in
     (* send request votes rpcs *)
-    let s = { s with persistent; server } in
+    let s = S.make_candidate ~server ~persistent ~volatile:s.volatile in
     let rv_args : Rv.args =
       {
         term = s.persistent.current_term;
@@ -38,7 +38,7 @@ struct
     in
     (S.Candidate s, [ Ac.ResetElectionTimer; Ac.RequestVotesRequest rv_args ])
 
-  let handle_request_votes (s : S.state) (rv, m) =
+  let handle_request_votes (s : S.follower) (rv, m) =
     let rv : Rv.args = rv in
     let vote_granted =
       (* reply false if term < current_term *)
@@ -56,7 +56,7 @@ struct
     let resp = ({ term = s.persistent.current_term; vote_granted } : Rv.res) in
     Lwt.return (S.Follower s, [ Ac.RequestVotesResponse (resp, m) ])
 
-  let handle_append_entries (s : S.state) (ae, m) =
+  let handle_append_entries (s : S.follower) (ae, m) =
     let ae : Ae.args = ae in
     let* resp =
       if

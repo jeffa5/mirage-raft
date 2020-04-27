@@ -47,7 +47,7 @@ module type S = sig
   }
   [@@deriving make, sexp]
 
-  type leader_state = {
+  type leader = {
     server : server;
     persistent : persistent;
     volatile : volatile;
@@ -55,10 +55,21 @@ module type S = sig
   }
   [@@deriving make, sexp]
 
-  type state = { server : server; persistent : persistent; volatile : volatile }
+  type candidate = {
+    server : server;
+    persistent : persistent;
+    volatile : volatile;
+  }
   [@@deriving make, sexp]
 
-  type t = Leader of leader_state | Candidate of state | Follower of state
+  type follower = {
+    server : server;
+    persistent : persistent;
+    volatile : volatile;
+  }
+  [@@deriving make, sexp]
+
+  type t = Leader of leader | Candidate of candidate | Follower of follower
   [@@deriving sexp]
 end
 
@@ -109,7 +120,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
   }
   [@@deriving make, sexp]
 
-  type leader_state = {
+  type leader = {
     server : server;
     persistent : persistent;
     volatile : volatile;
@@ -117,9 +128,20 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
   }
   [@@deriving make, sexp]
 
-  type state = { server : server; persistent : persistent; volatile : volatile }
+  type candidate = {
+    server : server;
+    persistent : persistent;
+    volatile : volatile;
+  }
   [@@deriving make, sexp]
 
-  type t = Leader of leader_state | Candidate of state | Follower of state
+  type follower = {
+    server : server;
+    persistent : persistent;
+    volatile : volatile;
+  }
+  [@@deriving make, sexp]
+
+  type t = Leader of leader | Candidate of candidate | Follower of follower
   [@@deriving sexp]
 end

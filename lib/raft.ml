@@ -27,7 +27,7 @@ struct
       let server = S.make_server ~self_id:id ~peers () in
       let persistent = S.make_persistent ~current_term ?voted_for ~log () in
       let volatile = S.make_volatile () in
-      S.make_state ~server ~persistent ~volatile
+      S.make_follower ~server ~persistent ~volatile
     in
     {
       state = S.Follower initial_state;
@@ -190,7 +190,8 @@ struct
                 in
                 handle_action
                   ( match s with
-                  | S.Follower s | S.Candidate s -> s.server
+                  | S.Follower s -> s.server
+                  | S.Candidate s -> s.server
                   | S.Leader s -> s.server )
                   a)
               actions
