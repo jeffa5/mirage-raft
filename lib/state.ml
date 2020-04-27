@@ -1,11 +1,7 @@
 open Sexplib0.Sexp_conv
 
 module type S = sig
-  type server = {
-    votes_received : int; [@default 0]
-    self_id : int;
-    peers : (int * Uri_sexp.t) list;
-  }
+  type server = { self_id : int; peers : (int * Uri_sexp.t) list }
   [@@deriving make, sexp]
 
   type plog [@@deriving sexp]
@@ -56,6 +52,7 @@ module type S = sig
   [@@deriving make, sexp]
 
   type candidate = {
+    votes_received : int * int;  (** tuple of term and count *)
     server : server;
     persistent : persistent;
     volatile : volatile;
@@ -74,11 +71,7 @@ module type S = sig
 end
 
 module Make (P : Plog.S) : S with type plog := P.t = struct
-  type server = {
-    votes_received : int; [@default 0]
-    self_id : int;
-    peers : (int * Uri_sexp.t) list;
-  }
+  type server = { self_id : int; peers : (int * Uri_sexp.t) list }
   [@@deriving make, sexp]
 
   type plog = P.t [@@deriving sexp]
@@ -129,6 +122,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
   [@@deriving make, sexp]
 
   type candidate = {
+    votes_received : int * int;  (** tuple of term and count *)
     server : server;
     persistent : persistent;
     volatile : volatile;

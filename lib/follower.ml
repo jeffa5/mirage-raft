@@ -25,9 +25,12 @@ struct
         voted_for = Some s.server.self_id;
       }
     in
-    let server = { s.server with votes_received = 1 } in
     (* send request votes rpcs *)
-    let s = S.make_candidate ~server ~persistent ~volatile:s.volatile in
+    let s =
+      S.make_candidate
+        ~votes_received:(persistent.current_term, 1)
+        ~server:s.server ~persistent ~volatile:s.volatile
+    in
     let rv_args : Rv.args =
       {
         term = s.persistent.current_term;
