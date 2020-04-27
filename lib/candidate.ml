@@ -1,8 +1,9 @@
 module Make
     (P : Plog.S)
+    (Ae : Append_entries.S)
     (Rv : Request_votes.S)
     (S : State.S with type plog := P.t)
-    (Ev : Event.S with type rv_res := Rv.res) =
+    (Ev : Event.S with type ae_res := Ae.res and type rv_res := Rv.res) =
 struct
   let handle_append_entries_request (s : S.candidate) _ae =
     let s =
@@ -10,6 +11,9 @@ struct
         ~volatile:s.volatile
     in
     (S.Follower s, [])
+
+  let handle_append_entries_response (s : S.candidate) (_res : Ae.res) =
+    (S.Candidate s, [])
 
   let handle_request_votes_request (s : S.candidate) _rv =
     let s =
@@ -48,7 +52,7 @@ struct
     | Ev.Timeout -> (S.Candidate s, [])
     | Ev.SendHeartbeat -> (S.Candidate s, [])
     | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae
-    | Ev.AppendEntriesResponse _ -> assert false
+    | Ev.AppendEntriesResponse res -> handle_append_entries_response s res
     | Ev.RequestVotesRequest rv -> handle_request_votes_request s rv
     | Ev.RequestVotesResponse res -> handle_request_votes_response s res
 end
