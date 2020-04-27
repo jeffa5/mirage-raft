@@ -115,12 +115,24 @@ struct
     let s = { s with volatile } in
     Lwt.return (S.Follower s, [ Ac.AppendEntriesResponse (resp, m) ])
 
+  let handle_append_entries_response (s : S.follower) (res : Ae.res) =
+    if res.term > s.persistent.current_term then
+      let s =
+        let persistent =
+          S.make_persistent ~current_term:res.term ~log:s.persistent.log ()
+        in
+        S.make_follower ~server:s.server ~persistent ~volatile:s.volatile
+      in
+      (S.Follower s, [])
+    else (* ignore this response *) (S.Follower s, [])
+
   let handle s event =
     match event with
     | Ev.Timeout -> Lwt.return @@ handle_timeout s
     | Ev.SendHeartbeat -> Lwt.return @@ (S.Follower s, [])
     | Ev.AppendEntriesRequest ae -> handle_append_entries s ae
-    | Ev.AppendEntriesResponse _ -> assert false
+    | Ev.AppendEntriesResponse res ->
+        Lwt.return @@ handle_append_entries_response s res
     | Ev.RequestVotesRequest rv -> handle_request_votes s rv
     | Ev.RequestVotesResponse _ -> assert false
 end
