@@ -10,7 +10,7 @@ struct
   module Ev = Event.Make (Ae) (Rv)
   module Ac = Action.Make (Ae) (Rv)
   module Leader = Leader.Make (P) (S) (Ae) (Ev) (Ac)
-  module Candidate = Candidate.Make (P) (S) (Ev)
+  module Candidate = Candidate.Make (P) (Rv) (S) (Ev)
   module Follower = Follower.Make (P) (S) (Ae) (Rv) (Ev) (Ac)
 
   type t = {
