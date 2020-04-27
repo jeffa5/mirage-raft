@@ -126,6 +126,19 @@ struct
       (S.Follower s, [])
     else (* ignore this response *) (S.Follower s, [])
 
+  let handle_request_votes_response (s : S.follower) (res : Rv.res) =
+    if res.term > s.persistent.current_term then
+      let s =
+        let persistent =
+          S.make_persistent ~current_term:res.term ~log:s.persistent.log ()
+        in
+        S.make_follower ~server:s.server ~persistent ~volatile:s.volatile
+      in
+      (S.Follower s, [])
+    else
+      (* ignore the response since it has nothing to do with us now *)
+      (S.Follower s, [])
+
   let handle s event =
     match event with
     | Ev.Timeout -> Lwt.return @@ handle_timeout s
@@ -134,5 +147,6 @@ struct
     | Ev.AppendEntriesResponse res ->
         Lwt.return @@ handle_append_entries_response s res
     | Ev.RequestVotesRequest rv -> handle_request_votes s rv
-    | Ev.RequestVotesResponse _ -> assert false
+    | Ev.RequestVotesResponse res ->
+        Lwt.return @@ handle_request_votes_response s res
 end
