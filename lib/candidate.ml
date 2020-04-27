@@ -65,12 +65,10 @@ struct
         (S.Candidate s, [])
 
   let handle (s : S.candidate) event =
-    (* start election timer  (timeout -> candidate again)*)
-    (* discovers current leader or new term (-> follower) *)
-    (* receives votes from majority of servers ( -> leader )*)
     match event with
-    | Ev.Timeout -> (S.Candidate s, [])
-    | Ev.SendHeartbeat -> (S.Candidate s, [])
+    | Ev.Timeout -> (* start new election *) (S.Candidate s, [])
+    | Ev.SendHeartbeat ->
+        (* candidates do not send append entries requests *) (S.Candidate s, [])
     | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae
     | Ev.AppendEntriesResponse res -> handle_append_entries_response s res
     | Ev.RequestVotesRequest rv -> handle_request_votes_request s rv
