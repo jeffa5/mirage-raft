@@ -20,7 +20,8 @@ struct
     let* current_term = P.current_term s.log in
     if res.term > current_term then
       let+ s =
-        let+ log = P.set_current_term s.log res.term in
+        let* log = P.set_current_term s.log res.term in
+        let+ log = P.set_voted_for log None in
         S.make_follower ~server:s.server ~log ~volatile:s.volatile
       in
       (S.Follower s, [])
@@ -34,7 +35,8 @@ struct
     let* current_term = P.current_term s.log in
     if res.term > current_term then
       let+ s =
-        let+ log = P.set_current_term s.log res.term in
+        let* log = P.set_current_term s.log res.term in
+        let+ log = P.set_voted_for log None in
         S.make_follower ~server:s.server ~log ~volatile:s.volatile
       in
       (S.Follower s, [])
