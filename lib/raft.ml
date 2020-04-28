@@ -26,11 +26,12 @@ struct
 
   (** timeout is the lower and upper bounds for the election timeout, [lower,upper), in ms
    *  heartbeat is the duration on which to repeat the heartbeat, in ms *)
-  let v ?(log = P.empty) ~timeout ~heartbeat ae_requests ae_responses
-      rv_requests rv_responses id peers =
+  let v ~timeout ~heartbeat ae_requests ae_responses rv_requests rv_responses id
+      peers =
     let+ initial_state =
       let server = S.make_server ~self_id:id ~peers () in
       let+ persistent =
+        let* log = P.v () in
         let+ current_term = P.current_term log
         and+ voted_for = P.voted_for log in
         S.make_persistent ~current_term ?voted_for ~log ()
