@@ -27,7 +27,6 @@ struct
   let handle_request_votes_response (s : S.leader) _r = (S.Leader s, [])
 
   let handle (s : S.leader) event =
-    (* upon election: send initial empty append_entries rpcs (heartbeat) to each server; repeat during idle periods to prevent election timeouts *)
     (* if command received from client: append entry to local log, respond after entry applied to state machine *)
     (* if last_log_index >= next_index for a follower: send append_entries rpc with log entries starting at next_index *)
     (* if successful: update next_index and match_index for follower *)
@@ -35,12 +34,8 @@ struct
     (* if there exists an N such that N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term: set commit_index = N *)
     match event with
     | Ev.Timeout ->
-        let s =
-          S.make_candidate
-            ~votes_received:(s.persistent.current_term, 1)
-            ~server:s.server ~volatile:s.volatile ~persistent:s.persistent
-        in
-        (S.Candidate s, [])
+        (* timeouts are for elections only but we are already a leader *)
+        (S.Leader s, [])
     | Ev.SendHeartbeat -> handle_send_heartbeat s
     | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae
     | Ev.AppendEntriesResponse r -> handle_append_entries_response s r
