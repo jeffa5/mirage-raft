@@ -26,7 +26,7 @@ struct
 
   (** timeout is the lower and upper bounds for the election timeout, [lower,upper), in ms
    *  heartbeat is the duration on which to repeat the heartbeat, in ms *)
-  let v ?(timeout_lower = 150) ?(timeout_upper = 301) ?(heartbeat = 100)
+  let v ?(timeout_lower = 150) ?(timeout_upper = 301) ?(heartbeat = 50)
       ae_requests ae_responses rv_requests rv_responses id peers =
     let+ initial_state =
       let server = S.make_server ~self_id:id ~peers () in
