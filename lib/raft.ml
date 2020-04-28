@@ -165,14 +165,16 @@ struct
           Sexplib0.Sexp.pp f (Ac.sexp_of_t a))
     in
 
-    let rec loop s =
+    let rec loop last s =
       let* () =
-        Logs_lwt.info (fun f ->
-            f "In state %s"
-              ( match s with
-              | S.Follower _ -> "follower"
-              | S.Candidate _ -> "candidate"
-              | S.Leader _ -> "leader" ))
+        if last <> s then
+          Logs_lwt.info (fun f ->
+              f "In state %s"
+                ( match s with
+                | S.Follower _ -> "follower"
+                | S.Candidate _ -> "candidate"
+                | S.Leader _ -> "leader" ))
+        else Lwt.return_unit
       in
       let* event = Lwt_stream.get events in
       match event with
@@ -184,7 +186,7 @@ struct
                   ~tags:
                     Logs.Tag.(empty |> add event_tag event |> add state_tag s))
           in
-          let* s, actions =
+          let* s', actions =
             match s with
             | S.Follower s -> Follower.handle s event
             | S.Candidate s -> Lwt.return @@ Candidate.handle s event
@@ -208,7 +210,7 @@ struct
                   a)
               actions
           in
-          loop s
+          loop s s'
     in
-    loop t.state
+    loop t.state t.state
 end
