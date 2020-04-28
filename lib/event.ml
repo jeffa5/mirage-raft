@@ -8,7 +8,7 @@ module type S = sig
   type rv_res [@@deriving sexp]
 
   type t =
-    | Timeout
+    | ElectionTimeout
     | SendHeartbeat
     | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of ae_res
@@ -17,7 +17,12 @@ module type S = sig
   [@@deriving sexp]
 end
 
-module Make (Ae : Append_entries.S) (Rv : Request_votes.S) = struct
+module Make (Ae : Append_entries.S) (Rv : Request_votes.S) :
+  S
+    with type ae_arg = Ae.args
+     and type ae_res = Ae.res
+     and type rv_arg = Rv.args
+     and type rv_res = Rv.res = struct
   type ae_arg = Ae.args [@@deriving sexp]
 
   type ae_res = Ae.res [@@deriving sexp]
@@ -27,7 +32,7 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) = struct
   type rv_res = Rv.res [@@deriving sexp]
 
   type t =
-    | Timeout
+    | ElectionTimeout
     | SendHeartbeat
     | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of ae_res

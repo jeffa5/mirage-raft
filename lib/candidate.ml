@@ -79,7 +79,7 @@ struct
 
   let handle (s : S.candidate) event =
     match event with
-    | Ev.Timeout -> (* start new election *) (S.Candidate s, [])
+    | Ev.ElectionTimeout -> (* start new election *) (S.Candidate s, [])
     | Ev.SendHeartbeat ->
         (* candidates do not send append entries requests *) (S.Candidate s, [])
     | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae

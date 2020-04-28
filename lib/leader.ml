@@ -33,8 +33,8 @@ struct
     (* if append_entries fails because of log inconsistency: decrement next_index and retry *)
     (* if there exists an N such that N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term: set commit_index = N *)
     match event with
-    | Ev.Timeout ->
-        (* timeouts are for elections only but we are already a leader *)
+    | Ev.ElectionTimeout ->
+        (* election timeouts are for elections only but we are already a leader *)
         (S.Leader s, [])
     | Ev.SendHeartbeat -> handle_send_heartbeat s
     | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae

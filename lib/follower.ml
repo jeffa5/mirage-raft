@@ -164,7 +164,7 @@ struct
 
   let handle s event =
     match event with
-    | Ev.Timeout -> Lwt.return @@ handle_timeout s
+    | Ev.ElectionTimeout -> Lwt.return @@ handle_timeout s
     | Ev.SendHeartbeat -> Lwt.return @@ (S.Follower s, [])
     | Ev.AppendEntriesRequest ae -> handle_append_entries s ae
     | Ev.AppendEntriesResponse res ->

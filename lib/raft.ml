@@ -71,7 +71,7 @@ struct
             Time.sleep_ns
               (Duration.of_ms (150 + Randomconv.int ~bound:151 Random.generate))
           in
-          Some (Some Ev.Timeout)
+          Some (Some Ev.ElectionTimeout)
         in
         let reset_timeout =
           let+ () = Lwt_mvar.take reset_election_timeout in
