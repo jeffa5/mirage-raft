@@ -1,6 +1,5 @@
 open Lwt.Syntax
 
-(* if voted_for is null  or candidate_id, and candidate's log is at least as up-to-date as receiver's log, grant vote *)
 module Make
     (P : Plog.S)
     (S : State.S with type plog := P.t)
@@ -18,28 +17,52 @@ module Make
              and type rv_res = Rv.res) =
 struct
   let handle_timeout (s : S.follower) =
-    let persistent =
-      {
-        s.persistent with
-        current_term = s.persistent.current_term + 1;
-        voted_for = Some s.server.self_id;
-      }
-    in
-    (* send request votes rpcs *)
-    let s =
-      S.make_candidate
-        ~votes_received:(persistent.current_term, 1)
-        ~server:s.server ~persistent ~volatile:s.volatile
-    in
-    let rv_args : Rv.args =
-      {
-        term = s.persistent.current_term;
-        candidate_id = s.server.self_id;
-        last_log_index = 0;
-        last_log_term = 0;
-      }
-    in
-    (S.Candidate s, [ Ac.ResetElectionTimer; Ac.RequestVotesRequest rv_args ])
+    match s.server.peers with
+    | [] ->
+        (* straight to leader *)
+        let persistent =
+          {
+            s.persistent with
+            current_term = s.persistent.current_term + 1;
+            voted_for = Some s.server.self_id;
+          }
+        in
+        let s =
+          S.make_leader ~server:s.server ~persistent ~volatile:s.volatile
+            ~volatile_leader:(S.make_volatile_leader ())
+        in
+        ( S.Leader s,
+          [
+            Ac.AppendEntriesRequest
+              (Ae.make_args ~term:s.persistent.current_term
+                 ~leader_id:s.server.self_id
+                 ~prev_log_index:s.volatile.commit_index
+                 ~prev_log_term:s.volatile.commit_index
+                 ~leader_commit:s.volatile.commit_index ());
+          ] )
+    | _ ->
+        let persistent =
+          {
+            s.persistent with
+            current_term = s.persistent.current_term + 1;
+            voted_for = Some s.server.self_id;
+          }
+        in
+        let s =
+          S.make_candidate
+            ~votes_received:(persistent.current_term, 1)
+            ~server:s.server ~persistent ~volatile:s.volatile
+        in
+        let rv_args : Rv.args =
+          {
+            term = s.persistent.current_term;
+            candidate_id = s.server.self_id;
+            last_log_index = 0;
+            last_log_term = 0;
+          }
+        in
+        ( S.Candidate s,
+          [ Ac.ResetElectionTimer; Ac.RequestVotesRequest rv_args ] )
 
   let handle_request_votes (s : S.follower) (rv, m) =
     let rv : Rv.args = rv in
