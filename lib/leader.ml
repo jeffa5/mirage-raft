@@ -9,7 +9,7 @@ struct
     let ae_args : Ae.args =
       {
         term = s.persistent.current_term;
-        leader_id = 0;
+        leader_id = s.server.self_id;
         prev_log_index = s.volatile.last_applied;
         prev_log_term = s.persistent.current_term;
         entries = [];
