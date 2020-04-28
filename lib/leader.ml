@@ -1,3 +1,5 @@
+open Lwt.Syntax
+
 module Make
     (P : Plog.S)
     (S : State.S with type plog := P.t)
@@ -6,12 +8,13 @@ module Make
     (Ac : Action.S with type ae_arg = Ae.args and type ae_res = Ae.res) =
 struct
   let handle_send_heartbeat (s : S.leader) =
+    let+ current_term = P.current_term s.log in
     let ae_args : Ae.args =
       {
-        term = s.persistent.current_term;
+        term = current_term;
         leader_id = s.server.self_id;
         prev_log_index = s.volatile.last_applied;
-        prev_log_term = s.persistent.current_term;
+        prev_log_term = current_term;
         entries = [];
         leader_commit = s.volatile.commit_index;
       }
@@ -35,10 +38,14 @@ struct
     match event with
     | Ev.ElectionTimeout ->
         (* election timeouts are for elections only but we are already a leader *)
-        (S.Leader s, [])
+        Lwt.return @@ (S.Leader s, [])
     | Ev.SendHeartbeat -> handle_send_heartbeat s
-    | Ev.AppendEntriesRequest ae -> handle_append_entries_request s ae
-    | Ev.AppendEntriesResponse r -> handle_append_entries_response s r
-    | Ev.RequestVotesRequest rv -> handle_request_votes_request s rv
-    | Ev.RequestVotesResponse r -> handle_request_votes_response s r
+    | Ev.AppendEntriesRequest ae ->
+        Lwt.return @@ handle_append_entries_request s ae
+    | Ev.AppendEntriesResponse r ->
+        Lwt.return @@ handle_append_entries_response s r
+    | Ev.RequestVotesRequest rv ->
+        Lwt.return @@ handle_request_votes_request s rv
+    | Ev.RequestVotesResponse r ->
+        Lwt.return @@ handle_request_votes_response s r
 end

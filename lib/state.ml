@@ -10,16 +10,6 @@ module type S = sig
  *  Updated on stable storage before responding to RPCs
  * *)
 
-  type persistent = {
-    current_term : int;
-        (** latest term server has seen (initialised to 0 on first boot, increases monotonically) *)
-    voted_for : int option;
-        (** candidate id that received vote in current term (or null if none) *)
-    log : plog;
-        (** log entries; each entry contains command for state machine and term when entry was received by leader (first index is 1) *)
-  }
-  [@@deriving make, sexp]
-
   (** Volatile state on all servers *)
 
   type volatile = {
@@ -45,7 +35,7 @@ module type S = sig
 
   type leader = {
     server : server;
-    persistent : persistent;
+    log : plog;
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
@@ -54,16 +44,12 @@ module type S = sig
   type candidate = {
     votes_received : int * int;  (** tuple of term and count *)
     server : server;
-    persistent : persistent;
+    log : plog;
     volatile : volatile;
   }
   [@@deriving make, sexp]
 
-  type follower = {
-    server : server;
-    persistent : persistent;
-    volatile : volatile;
-  }
+  type follower = { server : server; log : plog; volatile : volatile }
   [@@deriving make, sexp]
 
   type t = Leader of leader | Candidate of candidate | Follower of follower
@@ -80,16 +66,6 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
  *  Updated on stable storage before responding to RPCs
  * *)
 
-  type persistent = {
-    current_term : int;
-        (** latest term server has seen (initialised to 0 on first boot, increases monotonically) *)
-    voted_for : int option;
-        (** candidate id that received vote in current term (or null if none) *)
-    log : plog;
-        (** log entries; each entry contains command for state machine and term when entry was received by leader (first index is 1) *)
-  }
-  [@@deriving make, sexp]
-
   (** Volatile state on all servers *)
 
   type volatile = {
@@ -115,7 +91,7 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
 
   type leader = {
     server : server;
-    persistent : persistent;
+    log : plog;
     volatile : volatile;
     volatile_leader : volatile_leader;
   }
@@ -124,16 +100,12 @@ module Make (P : Plog.S) : S with type plog := P.t = struct
   type candidate = {
     votes_received : int * int;  (** tuple of term and count *)
     server : server;
-    persistent : persistent;
+    log : plog;
     volatile : volatile;
   }
   [@@deriving make, sexp]
 
-  type follower = {
-    server : server;
-    persistent : persistent;
-    volatile : volatile;
-  }
+  type follower = { server : server; log : plog; volatile : volatile }
   [@@deriving make, sexp]
 
   type t = Leader of leader | Candidate of candidate | Follower of follower

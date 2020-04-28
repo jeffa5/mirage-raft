@@ -30,14 +30,9 @@ struct
       peers =
     let+ initial_state =
       let server = S.make_server ~self_id:id ~peers () in
-      let+ persistent =
-        let* log = P.v () in
-        let+ current_term = P.current_term log
-        and+ voted_for = P.voted_for log in
-        S.make_persistent ~current_term ?voted_for ~log ()
-      in
+      let+ log = P.v () in
       let volatile = S.make_volatile () in
-      S.make_follower ~server ~persistent ~volatile
+      S.make_follower ~server ~log ~volatile
     in
     {
       state = S.Follower initial_state;
@@ -202,8 +197,8 @@ struct
           let* s', actions =
             match s with
             | S.Follower s -> Follower.handle s event
-            | S.Candidate s -> Lwt.return @@ Candidate.handle s event
-            | S.Leader ls -> Lwt.return @@ Leader.handle ls event
+            | S.Candidate s -> Candidate.handle s event
+            | S.Leader ls -> Leader.handle ls event
           in
           let* () =
             Lwt_list.iter_s
