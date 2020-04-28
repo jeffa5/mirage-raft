@@ -7,6 +7,10 @@ module type S = sig
 
   val empty : t
 
+  val current_term : t -> int Lwt.t
+
+  val voted_for : t -> int option Lwt.t
+
   val insert : t -> int -> entry -> t Lwt.t
 
   val get : t -> int -> entry option Lwt.t

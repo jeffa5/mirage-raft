@@ -16,22 +16,32 @@ struct
 
   type t = {
     state : S.t;
+    timeout : int * int;
+    heartbeat : int;
     ae_requests : (Ae.args * Ae.res Lwt_mvar.t) Lwt_stream.t;
     ae_responses : Ae.res Lwt_stream.t;
     rv_requests : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
     rv_responses : Rv.res Lwt_stream.t;
   }
 
-  let v ?(current_term = 0) ?(voted_for = None) ?(log = P.empty) ae_requests
-      ae_responses rv_requests rv_responses id peers =
-    let initial_state =
+  (** timeout is the lower and upper bounds for the election timeout, [lower,upper), in ms
+   *  heartbeat is the duration on which to repeat the heartbeat, in ms *)
+  let v ?(log = P.empty) ~timeout ~heartbeat ae_requests ae_responses
+      rv_requests rv_responses id peers =
+    let+ initial_state =
       let server = S.make_server ~self_id:id ~peers () in
-      let persistent = S.make_persistent ~current_term ?voted_for ~log () in
+      let+ persistent =
+        let+ current_term = P.current_term log
+        and+ voted_for = P.voted_for log in
+        S.make_persistent ~current_term ?voted_for ~log ()
+      in
       let volatile = S.make_volatile () in
       S.make_follower ~server ~persistent ~volatile
     in
     {
       state = S.Follower initial_state;
+      timeout;
+      heartbeat;
       ae_requests;
       ae_responses;
       rv_requests;
@@ -65,11 +75,13 @@ struct
 
     (* receive the call to append entries or a timeout and push the event to events *)
     let append_entries_requests () =
+      let lower, upper = t.timeout in
       let rec loop () =
         let election_timeout =
           let+ () =
             Time.sleep_ns
-              (Duration.of_ms (150 + Randomconv.int ~bound:151 Random.generate))
+              (Duration.of_ms
+                 (lower + Randomconv.int ~bound:(upper - lower) Random.generate))
           in
           Some (Some Ev.ElectionTimeout)
         in
@@ -144,7 +156,7 @@ struct
     (* ticker for leader to send heartbeats, can be ignored by others *)
     let heartbeat_ticker () =
       let rec loop () =
-        let* () = Time.sleep_ns (Duration.of_ms 100) in
+        let* () = Time.sleep_ns (Duration.of_ms t.heartbeat) in
         push_event (Some Ev.SendHeartbeat);
         loop ()
       in
