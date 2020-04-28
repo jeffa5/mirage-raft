@@ -45,7 +45,7 @@ struct
       if res.term = proposed_term && res.vote_granted then
         (* need to update the vote count *)
         let vote_count = votes + 1 in
-        if vote_count > List.length s.server.peers / 2 then
+        if 2 * vote_count > List.length s.server.peers + 1 then
           (* we have a majority so can become a leader *)
           let s =
             let volatile_leader = S.make_volatile_leader () in
@@ -67,7 +67,6 @@ struct
               ~votes_received:(proposed_term, vote_count)
               ~server:s.server ~volatile:s.volatile ~log:s.log
           in
-          (* check the updated vote count for a majority *)
           Lwt.return (S.Candidate s, [])
       else
         (* ignore the vote since it is for an incorrect term, maybe a previous vote *)
