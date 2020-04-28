@@ -5,7 +5,10 @@ module Make
     (Ae : Append_entries.S)
     (Rv : Request_votes.S)
     (S : State.S with type plog := P.t)
-    (Ev : Event.S with type ae_res := Ae.res and type rv_res := Rv.res)
+    (Ev : Event.S
+            with type ae_res := Ae.res
+             and type rv_res := Rv.res
+             and type rv_arg := Rv.args)
     (Ac : Action.S
             with type ae_arg = Ae.args
              and type ae_res = Ae.res
@@ -27,9 +30,38 @@ struct
       (S.Follower s, [])
     else (* ignore this response *) Lwt.return (S.Candidate s, [])
 
-  let handle_request_votes_request (s : S.candidate) _rv =
-    let s = S.make_follower ~server:s.server ~log:s.log ~volatile:s.volatile in
-    (S.Follower s, [])
+  let handle_request_votes_request (s : S.candidate) (rv, m) =
+    let rv : Rv.args = rv in
+    let* current_term = P.current_term s.log in
+    if rv.term > current_term then
+      let s =
+        S.make_follower ~server:s.server ~log:s.log ~volatile:s.volatile
+      in
+      Lwt.return (S.Follower s, [])
+    else if rv.term = current_term then
+      let* voted_for = P.voted_for s.log in
+      match voted_for with
+      | None ->
+          (* election reset event *)
+          let+ s =
+            let+ log = P.set_voted_for s.log (Some rv.candidate_id) in
+            S.make_candidate ~votes_received:s.votes_received ~server:s.server
+              ~log ~volatile:s.volatile
+          in
+          let resp = ({ term = current_term; vote_granted = true } : Rv.res) in
+          ( S.Candidate s,
+            [ Ac.ResetElectionTimer; Ac.RequestVotesResponse (resp, m) ] )
+      | Some i when i = rv.candidate_id ->
+          let resp = ({ term = current_term; vote_granted = true } : Rv.res) in
+          Lwt.return
+            ( S.Candidate s,
+              [ Ac.ResetElectionTimer; Ac.RequestVotesResponse (resp, m) ] )
+      | Some _ ->
+          let resp = ({ term = current_term; vote_granted = false } : Rv.res) in
+          Lwt.return (S.Candidate s, [ Ac.RequestVotesResponse (resp, m) ])
+    else
+      let resp = ({ term = current_term; vote_granted = false } : Rv.res) in
+      Lwt.return (S.Candidate s, [ Ac.RequestVotesResponse (resp, m) ])
 
   let handle_request_votes_response (s : S.candidate) (res : Rv.res) =
     let* current_term = P.current_term s.log in
@@ -82,7 +114,6 @@ struct
     | Ev.AppendEntriesRequest ae ->
         Lwt.return @@ handle_append_entries_request s ae
     | Ev.AppendEntriesResponse res -> handle_append_entries_response s res
-    | Ev.RequestVotesRequest rv ->
-        Lwt.return @@ handle_request_votes_request s rv
+    | Ev.RequestVotesRequest rv -> handle_request_votes_request s rv
     | Ev.RequestVotesResponse res -> handle_request_votes_response s res
 end
