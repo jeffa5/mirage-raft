@@ -9,7 +9,7 @@ module type S = sig
     entries : plog_entry list;
     leader_commit : int;
   }
-  [@@deriving sexp]
+  [@@deriving make, sexp]
 
   type res = { term : int; success : bool } [@@deriving sexp]
 

@@ -3,7 +3,12 @@ module Make
     (Ae : Append_entries.S)
     (Rv : Request_votes.S)
     (S : State.S with type plog := P.t)
-    (Ev : Event.S with type ae_res := Ae.res and type rv_res := Rv.res) =
+    (Ev : Event.S with type ae_res := Ae.res and type rv_res := Rv.res)
+    (Ac : Action.S
+            with type ae_arg = Ae.args
+             and type ae_res = Ae.res
+             and type rv_arg = Rv.args
+             and type rv_res = Rv.res) =
 struct
   let handle_append_entries_request (s : S.candidate) _ae =
     let s =
@@ -51,7 +56,15 @@ struct
             S.make_leader ~server:s.server ~volatile:s.volatile
               ~persistent:s.persistent ~volatile_leader
           in
-          (S.Leader s, [ (* handle becoming a leader *) ])
+          ( S.Leader s,
+            [
+              Ac.AppendEntriesRequest
+                (Ae.make_args ~term:s.persistent.current_term
+                   ~leader_id:s.server.self_id
+                   ~prev_log_index:s.volatile.commit_index
+                   ~prev_log_term:s.volatile.commit_index
+                   ~leader_commit:s.volatile.commit_index ());
+            ] )
         else
           let s =
             S.make_candidate
