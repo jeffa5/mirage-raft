@@ -37,8 +37,9 @@ struct
     let t =
       {
         t with
-        next_index = [];
-        match_index = [];
+        next_index =
+          List.init (List.length t.peers) (fun _ -> t.commit_index + 1);
+        match_index = List.init (List.length t.peers) (fun _ -> 0);
         stage = Leader;
         log;
         votes_received = 0;
