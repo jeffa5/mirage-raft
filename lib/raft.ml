@@ -7,12 +7,9 @@ module Make
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_votes.S) =
 struct
-  module S = State.Make (P)
   module Ev = Event.Make (Ae) (Rv)
   module Ac = Action.Make (Ae) (Rv)
-  module Leader = Leader.Make (P) (S) (Ae) (Ev) (Ac)
-  module Candidate = Candidate.Make (P) (Ae) (Rv) (S) (Ev) (Ac)
-  module Follower = Follower.Make (P) (S) (Ae) (Rv) (Ev) (Ac)
+  module S = State.Make (P) (Ae) (Rv) (Ev) (Ac)
 
   type t = {
     state : S.t;
@@ -28,14 +25,12 @@ struct
    *  heartbeat is the duration on which to repeat the heartbeat, in ms *)
   let v ?(timeout_lower = 150) ?(timeout_upper = 301) ?(heartbeat = 50)
       ae_requests ae_responses rv_requests rv_responses id peers =
-    let+ initial_state =
-      let server = S.make_server ~self_id:id ~peers () in
+    let+ state =
       let+ log = P.v () in
-      let volatile = S.make_volatile () in
-      S.make_follower ~server ~log ~volatile
+      S.make ~id ~peers ~log ()
     in
     {
-      state = S.Follower initial_state;
+      state;
       timeout = (timeout_lower, timeout_upper);
       heartbeat;
       ae_requests;
@@ -46,7 +41,7 @@ struct
 
   let reset_election_timeout = Lwt_mvar.create_empty ()
 
-  let handle_action (s : S.server) = function
+  let handle_action (s : S.t) = function
     | Ac.AppendEntriesRequest args ->
         List.iter
           (fun (_, uri) -> Lwt.async (fun () -> Ae.send uri args))
@@ -173,15 +168,12 @@ struct
           Sexplib0.Sexp.pp f (Ac.sexp_of_t a))
     in
 
-    let rec loop last s =
+    let rec loop (last : S.t) (s : S.t) =
       let* () =
-        if last <> s then
+        if last.stage <> s.stage then
           Logs_lwt.info (fun f ->
               f "In state %s"
-                ( match s with
-                | S.Follower _ -> "follower"
-                | S.Candidate _ -> "candidate"
-                | S.Leader _ -> "leader" ))
+                (Sexplib0.Sexp_conv.string_of_sexp @@ S.sexp_of_stage s.stage))
         else Lwt.return_unit
       in
       let* event = Lwt_stream.get events in
@@ -194,12 +186,7 @@ struct
                   ~tags:
                     Logs.Tag.(empty |> add event_tag event |> add state_tag s))
           in
-          let* s', actions =
-            match s with
-            | S.Follower s -> Follower.handle s event
-            | S.Candidate s -> Candidate.handle s event
-            | S.Leader ls -> Leader.handle ls event
-          in
+          let* s', actions = S.handle s event in
           let* () =
             Lwt_list.iter_s
               (fun a ->
@@ -210,12 +197,7 @@ struct
                           Logs.Tag.(
                             empty |> add action_tag a |> add state_tag s))
                 in
-                handle_action
-                  ( match s with
-                  | S.Follower s -> s.server
-                  | S.Candidate s -> s.server
-                  | S.Leader s -> s.server )
-                  a)
+                handle_action s a)
               actions
           in
           loop s s'
