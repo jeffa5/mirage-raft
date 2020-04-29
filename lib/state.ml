@@ -51,24 +51,35 @@ struct
     in
     (t, [ heartbeat ])
 
+  let become_candidate (t : t) =
+    let* term = P.current_term t.log in
+    let term = term + 1 in
+    let* log = P.set_current_term t.log term in
+    let+ log = P.set_voted_for log (Some t.id) in
+    let t = { t with log; stage = Candidate; votes_received = 1 } in
+    let rv_args =
+      Rv.make_args ~term ~candidate_id:t.id ~last_log_index:0 ~last_log_term:0
+    in
+    (t, [ Ac.ResetElectionVoteTimer; Ac.RequestVotesRequest rv_args ])
+
   let handle_timeout (t : t) =
-    match t.peers with
-    | [] ->
-        (* straight to leader *)
-        let* current_term = P.current_term t.log in
-        let* log = P.set_current_term t.log (current_term + 1) in
-        become_leader { t with log }
-    | _ ->
-        let* current_term = P.current_term t.log in
-        let new_term = current_term + 1 in
-        let* log = P.set_current_term t.log new_term in
-        let+ log = P.set_voted_for log (Some t.id) in
-        let t = { t with log; stage = Candidate; votes_received = 1 } in
-        let rv_args =
-          Rv.make_args ~term:new_term ~candidate_id:t.id ~last_log_index:0
-            ~last_log_term:0
-        in
-        (t, [ Ac.ResetElectionTimer; Ac.RequestVotesRequest rv_args ])
+    match t.stage with
+    | Leader ->
+        (* leaders don't care about election timeouts themselves *)
+        Lwt.return (t, [])
+    | _ -> (
+        match t.peers with
+        | [] ->
+            (* straight to leader *)
+            let* current_term = P.current_term t.log in
+            let* log = P.set_current_term t.log (current_term + 1) in
+            become_leader { t with log }
+        | _ -> become_candidate t )
+
+  let handle_vote_timeout (t : t) =
+    match t.stage with
+    | Follower | Leader -> Lwt.return (t, [])
+    | Candidate -> become_candidate t
 
   let handle_send_heartbeat (t : t) =
     match t.stage with
@@ -160,11 +171,10 @@ struct
             { t with log }
           in
           let resp = Rv.make_res ~term:current_term ~vote_granted:true in
-          (t, [ Ac.ResetElectionTimer; Ac.RequestVotesResponse (resp, mvar) ])
+          (t, [ Ac.RequestVotesResponse (resp, mvar) ])
       | Some i when i = req.candidate_id ->
           let resp = Rv.make_res ~term:current_term ~vote_granted:true in
-          Lwt.return
-            (t, [ Ac.ResetElectionTimer; Ac.RequestVotesResponse (resp, mvar) ])
+          Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
       | Some _ ->
           let resp = Rv.make_res ~term:current_term ~vote_granted:false in
           Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
@@ -200,6 +210,7 @@ struct
   let handle t event =
     match event with
     | Ev.ElectionTimeout -> handle_timeout t
+    | Ev.ElectionVoteTimeout -> handle_vote_timeout t
     | Ev.SendHeartbeat -> handle_send_heartbeat t
     | Ev.AppendEntriesRequest req -> handle_append_entries_request t req
     | Ev.AppendEntriesResponse res -> handle_append_entries_response t res
