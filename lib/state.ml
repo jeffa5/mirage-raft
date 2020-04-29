@@ -169,7 +169,10 @@ struct
         { t with log }
       in
       (t, [])
-    else if req.term = current_term then
+    else if req.term < current_term then
+      let resp = Rv.make_res ~term:current_term ~vote_granted:false in
+      Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
+    else
       let* voted_for = P.voted_for t.log in
       match voted_for with
       | None ->
@@ -177,17 +180,16 @@ struct
             let+ log = P.set_voted_for t.log (Some req.candidate_id) in
             { t with log }
           in
+          (* check that candidate's log is at least as up to date as receiver's log *)
           let resp = Rv.make_res ~term:current_term ~vote_granted:true in
           (t, [ Ac.RequestVotesResponse (resp, mvar) ])
       | Some i when i = req.candidate_id ->
+          (* check that candidate's log is at least as up to date as receiver's log *)
           let resp = Rv.make_res ~term:current_term ~vote_granted:true in
           Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
       | Some _ ->
           let resp = Rv.make_res ~term:current_term ~vote_granted:false in
           Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
-    else
-      let resp = Rv.make_res ~term:current_term ~vote_granted:false in
-      Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
 
   let handle_request_votes_response (t : t) (res : Rv.res) =
     let* current_term = P.current_term t.log in
