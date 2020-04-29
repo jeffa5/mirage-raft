@@ -165,8 +165,7 @@ struct
     let* current_term = P.current_term t.log in
     if req.term > current_term then
       let+ t =
-        let* log = P.set_current_term t.log req.term in
-        let+ log = P.set_voted_for log None in
+        let+ log = P.set_current_term t.log req.term in
         { t with log }
       in
       (t, [])
