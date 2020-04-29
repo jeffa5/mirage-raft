@@ -3,7 +3,7 @@ open Lwt.Syntax
 
 module Make
     (P : Plog.S)
-    (Ae : Append_entries.S with type plog_entry := P.entry)
+    (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_votes.S)
     (Ev : Event.S
             with type ae_arg := Ae.args
@@ -64,13 +64,10 @@ struct
 
   let handle_timeout (t : t) =
     match t.stage with
-    | Leader ->
-        (* leaders don't care about election timeouts themselves *)
-        Lwt.return (t, [])
+    | Leader -> Lwt.return (t, [])
     | _ -> (
         match t.peers with
         | [] ->
-            (* straight to leader *)
             let* current_term = P.current_term t.log in
             let* log = P.set_current_term t.log (current_term + 1) in
             become_leader { t with log }
@@ -83,63 +80,74 @@ struct
 
   let handle_send_heartbeat (t : t) =
     match t.stage with
-    | Follower | Candidate ->
-        (* only leaders send heartbeats *) Lwt.return (t, [])
+    | Follower | Candidate -> Lwt.return (t, [])
     | Leader ->
-        let+ current_term = P.current_term t.log in
+        let+ term = P.current_term t.log in
         let ae_args =
-          Ae.make_args ~term:current_term ~leader_id:t.id
-            ~prev_log_index:t.last_applied ~prev_log_term:current_term
-            ~leader_commit:t.commit_index ()
+          Ae.make_args ~term ~leader_id:t.id ~prev_log_index:t.last_applied
+            ~prev_log_term:term ~leader_commit:t.commit_index ()
         in
         (t, [ Ac.AppendEntriesRequest ae_args ])
 
   let handle_append_entries_request (t : t)
-      ((ae, m) : Ae.args * Ae.res Lwt_mvar.t) =
-    let* resp =
+      ((req, mvar) : Ae.args * Ae.res Lwt_mvar.t) =
+    (* if leader_commit_index  > last_applied, increment last_applied, apply log[last_applied] to state machine *)
+    let* t =
       let* current_term = P.current_term t.log in
-      if (* reply false if term < currentTerm *)
-         ae.term < current_term then
-        Lwt.return ({ term = current_term; success = false } : Ae.res)
-      else
-        let* entry = P.get t.log ae.prev_log_index in
-        match entry with
-        | None -> Lwt.return ({ term = current_term; success = false } : Ae.res)
-        | Some entry ->
-            if entry.term <> ae.prev_log_term then
-              (* reply false if log  doesn't contain  an entry  at prev_log_index whose term matches prev_log_term*)
-              Lwt.return ({ term = current_term; success = false } : Ae.res)
-            else
-              let* _, _l =
-                Lwt_list.fold_left_s
-                  (fun (i, l) entry ->
-                    let entry : P.entry = entry in
-                    let* existing = P.get l i in
-                    (* if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it*)
-                    let* l =
-                      match existing with
-                      | None -> Lwt.return l
-                      | Some existing ->
-                          if existing.term <> entry.term then P.delete_since l i
-                          else Lwt.return l
-                    in
-
-                    (* append any new entries not already in the log *)
-                    let* l = P.insert l i entry in
-                    Lwt.return (i + 1, l))
-                  (ae.prev_log_index + 1, t.log)
-                  ae.entries
+      if req.term > current_term then
+        let+ log = P.set_current_term t.log (current_term + 1) in
+        { t with stage = Follower; log }
+      else Lwt.return t
+    in
+    let* current_term = P.current_term t.log in
+    if req.term < current_term then
+      let response = Ae.make_res ~term:current_term ~success:false in
+      Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+    else
+      let* prev_log_index_entry = P.get t.log req.prev_log_index in
+      match prev_log_index_entry with
+      | None ->
+          let response = Ae.make_res ~term:current_term ~success:false in
+          Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+      | Some entry ->
+          if entry.term <> req.prev_log_term then
+            let response = Ae.make_res ~term:current_term ~success:false in
+            Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+          else
+            let* t, _ =
+              Lwt_list.fold_left_s
+                (fun (t, i) (entry : Ae.plog_entry) ->
+                  let* e = P.get t.log i in
+                  match e with
+                  | None -> Lwt.return (t, i + 1)
+                  | Some e ->
+                      if e.term = entry.term then Lwt.return (t, i + 1)
+                      else
+                        let+ log = P.delete_since t.log i in
+                        ({ t with log }, i + 1))
+                (t, req.prev_log_index + 1)
+                req.entries
+            in
+            let* t, _ =
+              Lwt_list.fold_left_s
+                (fun (t, i) entry ->
+                  let+ log = P.insert t.log i entry in
+                  ({ t with log }, i + 1))
+                (t, req.prev_log_index + 1)
+                req.entries
+            in
+            let response = Ae.make_res ~term:current_term ~success:true in
+            if req.leader_commit > t.commit_index then
+              let t =
+                {
+                  t with
+                  commit_index =
+                    min req.leader_commit
+                      (req.prev_log_index + List.length req.entries);
+                }
               in
-              Lwt.return ({ term = current_term; success = false } : Ae.res)
-    in
-    (* if leader_commit > commit_index, set commit_index=min(leader_commit, index of last new entry) *)
-    let t =
-      if ae.leader_commit > t.commit_index then
-        { t with commit_index = min ae.leader_commit t.last_applied }
-      else t
-    in
-    Lwt.return
-      ({ t with stage = Follower }, [ Ac.AppendEntriesResponse (resp, m) ])
+              Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+            else Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
 
   let handle_append_entries_response (t : t) (res : Ae.res) =
     let* current_term = P.current_term t.log in
@@ -150,7 +158,7 @@ struct
         { t with log; stage = Follower }
       in
       (t, [])
-    else (* ignore this response *) Lwt.return (t, [])
+    else Lwt.return (t, [])
 
   let handle_request_votes_request (t : t)
       ((req, mvar) : Rv.args * Rv.res Lwt_mvar.t) =
@@ -194,18 +202,12 @@ struct
     else
       let votes = t.votes_received in
       if res.term = current_term && res.vote_granted then
-        (* need to update the vote count *)
         let vote_count = votes + 1 in
-        if 2 * vote_count > List.length t.peers + 1 then
-          (* we have a majority so can become a leader *)
-          (* become leader so send out initial heartbeat *)
-          become_leader t
+        if 2 * vote_count > List.length t.peers + 1 then become_leader t
         else
           let t = { t with votes_received = vote_count } in
           Lwt.return (t, [])
-      else
-        (* ignore the vote since it is for an incorrect term, maybe a previous vote *)
-        Lwt.return (t, [])
+      else Lwt.return (t, [])
 
   let handle t event =
     match event with
