@@ -31,21 +31,33 @@ struct
   }
   [@@deriving make, sexp]
 
+  let become_leader (t : t) =
+    let* term = P.current_term t.log in
+    let+ log = P.set_voted_for t.log None in
+    let t =
+      {
+        t with
+        next_index = [];
+        match_index = [];
+        stage = Leader;
+        log;
+        votes_received = 0;
+      }
+    in
+    let heartbeat =
+      Ac.AppendEntriesRequest
+        (Ae.make_args ~term ~leader_id:t.id ~prev_log_index:t.commit_index
+           ~prev_log_term:t.commit_index ~leader_commit:t.commit_index ())
+    in
+    (t, [ heartbeat ])
+
   let handle_timeout (t : t) =
     match t.peers with
     | [] ->
         (* straight to leader *)
         let* current_term = P.current_term t.log in
         let* log = P.set_current_term t.log (current_term + 1) in
-        let+ log = P.set_voted_for log (Some t.id) in
-        let t = { t with log; stage = Leader } in
-        ( t,
-          [
-            Ac.AppendEntriesRequest
-              (Ae.make_args ~term:current_term ~leader_id:t.id
-                 ~prev_log_index:t.commit_index ~prev_log_term:t.commit_index
-                 ~leader_commit:t.commit_index ());
-          ] )
+        become_leader { t with log }
     | _ ->
         let* current_term = P.current_term t.log in
         let new_term = current_term + 1 in
@@ -176,18 +188,8 @@ struct
         let vote_count = votes + 1 in
         if 2 * vote_count > List.length t.peers + 1 then
           (* we have a majority so can become a leader *)
-          let t =
-            { t with stage = Leader; next_index = []; match_index = [] }
-          in
-          Lwt.return
-            ( t,
-              [
-                Ac.AppendEntriesRequest
-                  (Ae.make_args ~term:current_term ~leader_id:t.id
-                     ~prev_log_index:t.commit_index
-                     ~prev_log_term:t.commit_index ~leader_commit:t.commit_index
-                     ());
-              ] )
+          (* become leader so send out initial heartbeat *)
+          become_leader t
         else
           let t = { t with votes_received = vote_count } in
           Lwt.return (t, [])
