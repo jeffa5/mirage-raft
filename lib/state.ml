@@ -63,6 +63,11 @@ struct
     in
     (t, [ Ac.ResetElectionVoteTimer; Ac.RequestVotesRequest rv_args ])
 
+  let become_follower (t : t) term =
+    let* log = P.set_current_term t.log term in
+    let+ log = P.set_voted_for log None in
+    ({ t with log; stage = Follower }, [])
+
   let handle_timeout (t : t) =
     match t.stage with
     | Leader -> Lwt.return (t, [])
@@ -152,13 +157,7 @@ struct
 
   let handle_append_entries_response (t : t) (res : Ae.res) =
     let* current_term = P.current_term t.log in
-    if res.term > current_term then
-      let+ t =
-        let* log = P.set_current_term t.log res.term in
-        let+ log = P.set_voted_for log None in
-        { t with log; stage = Follower }
-      in
-      (t, [])
+    if res.term > current_term then become_follower t res.term
     else Lwt.return (t, [])
 
   let handle_request_votes_request (t : t)
@@ -194,13 +193,7 @@ struct
 
   let handle_request_votes_response (t : t) (res : Rv.res) =
     let* current_term = P.current_term t.log in
-    if res.term > current_term then
-      let+ t =
-        let* log = P.set_current_term t.log res.term in
-        let+ log = P.set_voted_for log None in
-        { t with log }
-      in
-      (t, [])
+    if res.term > current_term then become_follower t res.term
     else
       let votes = t.votes_received in
       if res.term = current_term && res.vote_granted then
