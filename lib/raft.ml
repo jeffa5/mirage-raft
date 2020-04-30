@@ -39,7 +39,7 @@ struct
       rv_responses;
     }
 
-  let reset_election_vote_timeout = Lwt_mvar.create_empty ()
+  let reset_election_timeout = Lwt_mvar.create_empty ()
 
   let handle_action (s : S.t) = function
     | Ac.AppendEntriesRequest args ->
@@ -54,7 +54,7 @@ struct
           s.peers
         |> Lwt.return
     | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res
-    | Ac.ResetElectionVoteTimer -> Lwt_mvar.put reset_election_vote_timeout ()
+    | Ac.ResetElectionTimeout -> Lwt_mvar.put reset_election_timeout ()
 
   let handle (t : t) =
     let* () = Logs_lwt.info (fun f -> f "Starting raft") in
@@ -66,49 +66,34 @@ struct
 
     (* receive the call to append entries or a timeout and push the event to events *)
     let append_entries_requests () =
-      let lower, upper = t.timeout in
       let rec loop () =
-        let election_timeout =
-          let+ () =
-            Time.sleep_ns
-              (Duration.of_ms
-                 (lower + Randomconv.int ~bound:(upper - lower) Random.generate))
-          in
-          Some Ev.ElectionTimeout
-        in
-        let get_ae_request =
-          let+ ae = Lwt_stream.get t.ae_requests in
-          match ae with
-          | None -> None
-          | Some ae -> Some (Ev.AppendEntriesRequest ae)
-        in
-        let* event = Lwt.pick [ election_timeout; get_ae_request ] in
-        match event with
+        let* ae = Lwt_stream.get t.ae_requests in
+        match ae with
         | None -> Lwt.return_unit
-        | Some event ->
-            push_event (Some event);
+        | Some ae ->
+            push_event (Some (Ev.AppendEntriesRequest ae));
             loop ()
       in
       loop ()
     in
     Lwt.async append_entries_requests;
 
-    let election_vote_timeout () =
+    let election_timeout () =
       let lower, upper = t.timeout in
       let rec loop () =
-        let election_timeout =
+        let timeout =
           let+ () =
             Time.sleep_ns
               (Duration.of_ms
                  (lower + Randomconv.int ~bound:(upper - lower) Random.generate))
           in
-          Some (Some Ev.ElectionVoteTimeout)
+          Some (Some Ev.ElectionTimeout)
         in
         let reset_timeout =
-          let+ () = Lwt_mvar.take reset_election_vote_timeout in
+          let+ () = Lwt_mvar.take reset_election_timeout in
           Some None
         in
-        let* event = Lwt.pick [ election_timeout; reset_timeout ] in
+        let* event = Lwt.pick [ timeout; reset_timeout ] in
         match event with
         | None -> Lwt.return_unit
         | Some event -> (
@@ -122,7 +107,7 @@ struct
       in
       loop ()
     in
-    Lwt.async election_vote_timeout;
+    Lwt.async election_timeout;
 
     let append_entries_responses () =
       let rec loop () =

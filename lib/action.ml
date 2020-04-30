@@ -12,7 +12,7 @@ module type S = sig
     | AppendEntriesResponse of (ae_res * (ae_res Lwt_mvar.t[@opaque]))
     | RequestVotesRequest of rv_arg
     | RequestVotesResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
-    | ResetElectionVoteTimer
+    | ResetElectionTimeout
   [@@deriving sexp]
 end
 
@@ -35,6 +35,6 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) :
     | AppendEntriesResponse of (ae_res * (ae_res Lwt_mvar.t[@opaque]))
     | RequestVotesRequest of rv_arg
     | RequestVotesResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
-    | ResetElectionVoteTimer
+    | ResetElectionTimeout
   [@@deriving sexp]
 end

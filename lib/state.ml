@@ -61,28 +61,24 @@ struct
     let rv_args =
       Rv.make_args ~term ~candidate_id:t.id ~last_log_index:0 ~last_log_term:0
     in
-    (t, [ Ac.ResetElectionVoteTimer; Ac.RequestVotesRequest rv_args ])
+    (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesRequest rv_args ])
 
   let become_follower (t : t) term =
     let* log = P.set_current_term t.log term in
     let+ log = P.set_voted_for log None in
-    ({ t with log; stage = Follower }, [])
+    ({ t with log; stage = Follower }, [ Ac.ResetElectionTimeout ])
 
   let handle_timeout (t : t) =
     match t.stage with
-    | Candidate | Leader -> Lwt.return (t, [])
-    | _ -> (
+    | Leader -> Lwt.return (t, [])
+    | Candidate -> become_candidate t
+    | Follower -> (
         match t.peers with
         | [] ->
             let* current_term = P.current_term t.log in
             let* log = P.set_current_term t.log (current_term + 1) in
             become_leader { t with log }
         | _ -> become_candidate t )
-
-  let handle_vote_timeout (t : t) =
-    match t.stage with
-    | Follower | Leader -> Lwt.return (t, [])
-    | Candidate -> become_candidate t
 
   let handle_send_heartbeat (t : t) =
     match t.stage with
@@ -108,17 +104,30 @@ struct
     let* current_term = P.current_term t.log in
     if req.term < current_term then
       let response = Ae.make_res ~term:current_term ~success:false in
-      Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+      Lwt.return
+        ( t,
+          [ Ac.ResetElectionTimeout; Ac.AppendEntriesResponse (response, mvar) ]
+        )
     else
       let* prev_log_index_entry = P.get t.log req.prev_log_index in
       match prev_log_index_entry with
       | None ->
           let response = Ae.make_res ~term:current_term ~success:false in
-          Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+          Lwt.return
+            ( t,
+              [
+                Ac.ResetElectionTimeout;
+                Ac.AppendEntriesResponse (response, mvar);
+              ] )
       | Some entry ->
           if entry.term <> req.prev_log_term then
             let response = Ae.make_res ~term:current_term ~success:false in
-            Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+            Lwt.return
+              ( t,
+                [
+                  Ac.ResetElectionTimeout;
+                  Ac.AppendEntriesResponse (response, mvar);
+                ] )
           else
             let* t, _ =
               Lwt_list.fold_left_s
@@ -152,8 +161,19 @@ struct
                       (req.prev_log_index + List.length req.entries);
                 }
               in
-              Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
-            else Lwt.return (t, [ Ac.AppendEntriesResponse (response, mvar) ])
+              Lwt.return
+                ( t,
+                  [
+                    Ac.ResetElectionTimeout;
+                    Ac.AppendEntriesResponse (response, mvar);
+                  ] )
+            else
+              Lwt.return
+                ( t,
+                  [
+                    Ac.ResetElectionTimeout;
+                    Ac.AppendEntriesResponse (response, mvar);
+                  ] )
 
   let handle_append_entries_response (t : t) (res : Ae.res) =
     let* current_term = P.current_term t.log in
@@ -172,7 +192,8 @@ struct
     let* term = P.current_term t.log in
     if req.term < term then
       let resp = Rv.make_res ~term ~vote_granted:false in
-      Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
+      Lwt.return
+        (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
     else
       let* voted_for = P.voted_for t.log in
       match voted_for with
@@ -183,24 +204,20 @@ struct
           in
           (* check that candidate's log is at least as up to date as receiver's log *)
           let resp = Rv.make_res ~term ~vote_granted:true in
-          ( t,
-            [ Ac.ResetElectionVoteTimer; Ac.RequestVotesResponse (resp, mvar) ]
-          )
+          (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
       | Some i when i = req.candidate_id ->
           (* check that candidate's log is at least as up to date as receiver's log *)
           let resp = Rv.make_res ~term ~vote_granted:true in
           Lwt.return
             ( t,
-              [
-                Ac.ResetElectionVoteTimer; Ac.RequestVotesResponse (resp, mvar);
-              ] )
+              [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ]
+            )
       | Some _ ->
           let resp = Rv.make_res ~term ~vote_granted:false in
           Lwt.return
             ( t,
-              [
-                Ac.ResetElectionVoteTimer; Ac.RequestVotesResponse (resp, mvar);
-              ] )
+              [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ]
+            )
 
   let handle_request_votes_response (t : t) (res : Rv.res) =
     let* current_term = P.current_term t.log in
@@ -218,7 +235,6 @@ struct
   let handle t event =
     match event with
     | Ev.ElectionTimeout -> handle_timeout t
-    | Ev.ElectionVoteTimeout -> handle_vote_timeout t
     | Ev.SendHeartbeat -> handle_send_heartbeat t
     | Ev.AppendEntriesRequest req -> handle_append_entries_request t req
     | Ev.AppendEntriesResponse res -> handle_append_entries_response t res

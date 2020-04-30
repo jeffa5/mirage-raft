@@ -9,7 +9,6 @@ module type S = sig
 
   type t =
     | ElectionTimeout
-    | ElectionVoteTimeout
     | SendHeartbeat
     | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of ae_res
@@ -34,7 +33,6 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) :
 
   type t =
     | ElectionTimeout
-    | ElectionVoteTimeout
     | SendHeartbeat
     | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of ae_res
