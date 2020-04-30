@@ -5,16 +5,20 @@ module Make
     (P : Plog.S)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_votes.S)
+    (M : Machine.S)
     (Ev : Event.S
             with type ae_arg := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
-             and type rv_res := Rv.res)
+             and type rv_res := Rv.res
+             and type command_input := M.input
+             and type command_output := M.output)
     (Ac : Action.S
             with type ae_arg := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
-             and type rv_res := Rv.res) =
+             and type rv_res := Rv.res
+             and type command_output := M.output) =
 struct
   type stage = Leader | Candidate | Follower [@@deriving sexp]
 
@@ -28,6 +32,7 @@ struct
     votes_received : int; [@default 0]
     next_index : int list;
     match_index : int list;
+    machine : M.t;
   }
   [@@deriving make, sexp]
 
@@ -232,6 +237,12 @@ struct
           Lwt.return (t, [])
       else Lwt.return (t, [])
 
+  let handle_command (t : t)
+      ((_com, mvar) : M.input * M.output option Lwt_mvar.t) =
+    match t.stage with
+    | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
+    | Leader -> Lwt.return (t, [ (* replicate *) ])
+
   let handle t event =
     match event with
     | Ev.ElectionTimeout -> handle_timeout t
@@ -240,4 +251,5 @@ struct
     | Ev.AppendEntriesResponse res -> handle_append_entries_response t res
     | Ev.RequestVotesRequest req -> handle_request_votes_request t req
     | Ev.RequestVotesResponse res -> handle_request_votes_response t res
+    | Ev.CommandReceived com -> handle_command t com
 end

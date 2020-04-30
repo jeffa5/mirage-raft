@@ -5,11 +5,12 @@ module Make
     (Random : Mirage_random.S)
     (P : Plog.S)
     (Ae : Append_entries.S with type plog_entry = P.entry)
-    (Rv : Request_votes.S) =
+    (Rv : Request_votes.S)
+    (M : Machine.S) =
 struct
-  module Ev = Event.Make (Ae) (Rv)
-  module Ac = Action.Make (Ae) (Rv)
-  module S = State.Make (P) (Ae) (Rv) (Ev) (Ac)
+  module Ev = Event.Make (Ae) (Rv) (M)
+  module Ac = Action.Make (Ae) (Rv) (M)
+  module S = State.Make (P) (Ae) (Rv) (M) (Ev) (Ac)
 
   type t = {
     state : S.t;
@@ -27,7 +28,8 @@ struct
       ae_requests ae_responses rv_requests rv_responses id peers =
     let+ state =
       let+ log = P.v () in
-      S.make ~id ~peers ~log ()
+      let machine = M.v () in
+      S.make ~id ~peers ~log ~machine ()
     in
     {
       state;
@@ -55,6 +57,7 @@ struct
         |> Lwt.return
     | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.ResetElectionTimeout -> Lwt_mvar.put reset_election_timeout ()
+    | Ac.CommandResponse (res, mvar) -> Lwt_mvar.put mvar res
 
   let handle (t : t) =
     let* () = Logs_lwt.info (fun f -> f "Starting raft") in
