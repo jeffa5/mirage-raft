@@ -170,7 +170,7 @@ struct
       else Lwt.return t
     in
     let* term = P.current_term t.log in
-    if req.term <> term then
+    if req.term < term then
       let resp = Rv.make_res ~term ~vote_granted:false in
       Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
     else
