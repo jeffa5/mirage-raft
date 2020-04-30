@@ -101,8 +101,8 @@ struct
     let* t =
       let* current_term = P.current_term t.log in
       if req.term > current_term then
-        let+ log = P.set_current_term t.log (current_term + 1) in
-        { t with stage = Follower; log }
+        let+ t, _ = become_follower t req.term in
+        t
       else Lwt.return t
     in
     let* current_term = P.current_term t.log in
@@ -162,15 +162,16 @@ struct
 
   let handle_request_votes_request (t : t)
       ((req, mvar) : Rv.args * Rv.res Lwt_mvar.t) =
-    let* current_term = P.current_term t.log in
-    if req.term > current_term then
-      let+ t =
-        let+ log = P.set_current_term t.log req.term in
-        { t with log }
-      in
-      (t, [])
-    else if req.term < current_term then
-      let resp = Rv.make_res ~term:current_term ~vote_granted:false in
+    let* t =
+      let* term = P.current_term t.log in
+      if req.term > term then
+        let+ t, _ = become_follower t req.term in
+        t
+      else Lwt.return t
+    in
+    let* term = P.current_term t.log in
+    if req.term <> term then
+      let resp = Rv.make_res ~term ~vote_granted:false in
       Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
     else
       let* voted_for = P.voted_for t.log in
@@ -181,15 +182,25 @@ struct
             { t with log }
           in
           (* check that candidate's log is at least as up to date as receiver's log *)
-          let resp = Rv.make_res ~term:current_term ~vote_granted:true in
-          (t, [ Ac.RequestVotesResponse (resp, mvar) ])
+          let resp = Rv.make_res ~term ~vote_granted:true in
+          ( t,
+            [ Ac.ResetElectionVoteTimer; Ac.RequestVotesResponse (resp, mvar) ]
+          )
       | Some i when i = req.candidate_id ->
           (* check that candidate's log is at least as up to date as receiver's log *)
-          let resp = Rv.make_res ~term:current_term ~vote_granted:true in
-          Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
+          let resp = Rv.make_res ~term ~vote_granted:true in
+          Lwt.return
+            ( t,
+              [
+                Ac.ResetElectionVoteTimer; Ac.RequestVotesResponse (resp, mvar);
+              ] )
       | Some _ ->
-          let resp = Rv.make_res ~term:current_term ~vote_granted:false in
-          Lwt.return (t, [ Ac.RequestVotesResponse (resp, mvar) ])
+          let resp = Rv.make_res ~term ~vote_granted:false in
+          Lwt.return
+            ( t,
+              [
+                Ac.ResetElectionVoteTimer; Ac.RequestVotesResponse (resp, mvar);
+              ] )
 
   let handle_request_votes_response (t : t) (res : Rv.res) =
     let* current_term = P.current_term t.log in
