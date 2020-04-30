@@ -70,7 +70,7 @@ struct
 
   let handle_timeout (t : t) =
     match t.stage with
-    | Leader -> Lwt.return (t, [])
+    | Candidate | Leader -> Lwt.return (t, [])
     | _ -> (
         match t.peers with
         | [] ->
