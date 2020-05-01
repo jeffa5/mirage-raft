@@ -21,8 +21,14 @@ module type S = sig
   (** [set_voted_for t v] updates the log with [v] and persists the change before returning *)
 
   val insert : t -> int -> entry -> t Lwt.t
+  (** [insert t i e] inserts entry [e] into [t] at index [i] *)
 
   val get : t -> int -> entry option Lwt.t
+  (** [get t i] gets the (maybe missing) entry at index [i] *)
 
-  val delete_since : t -> int -> t Lwt.t
+  val delete_from : t -> int -> t Lwt.t
+  (** [delete_from t i] deletes all entries starting from index [i] inclusive *)
+
+  val get_from : t -> int -> entry list Lwt.t
+  (** [get_from t i] returns the list of entries from index [i] inclusive *)
 end

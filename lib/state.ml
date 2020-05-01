@@ -156,7 +156,7 @@ struct
                   | Some e ->
                       if e.term = entry.term then Lwt.return (t, i + 1)
                       else
-                        let+ log = P.delete_since t.log i in
+                        let+ log = P.delete_from t.log i in
                         ({ t with log }, i + 1))
                 (t, req.prev_log_index + 1)
                 req.entries
