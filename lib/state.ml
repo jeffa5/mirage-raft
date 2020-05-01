@@ -1,5 +1,6 @@
 open Sexplib0.Sexp_conv
 open Lwt.Syntax
+open Asetmap
 
 module Make
     (P : Plog.S)
@@ -20,6 +21,17 @@ module Make
              and type rv_res := Rv.res
              and type command_output := M.output) =
 struct
+  module CommandMap = struct
+    module Mp = Map.Make (Int)
+    include Mp
+
+    type t = M.input Mp.t
+
+    let t_of_sexp s = [%of_sexp: (int * M.input) list] s |> Mp.of_list
+
+    let sexp_of_t t = Mp.to_list t |> [%sexp_of: (int * M.input) list]
+  end
+
   type stage = Leader | Candidate | Follower [@@deriving sexp]
 
   type t = {
@@ -33,6 +45,7 @@ struct
     next_index : int list;
     match_index : int list;
     machine : M.t;
+    replicating : CommandMap.t; [@default CommandMap.empty]
   }
   [@@deriving make, sexp]
 
