@@ -1,5 +1,5 @@
 module type S = sig
-  type ae_arg [@@deriving sexp]
+  type ae_args [@@deriving sexp]
 
   type ae_res [@@deriving sexp]
 
@@ -14,8 +14,8 @@ module type S = sig
   type t =
     | ElectionTimeout
     | SendHeartbeat
-    | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
-    | AppendEntriesResponse of ae_res
+    | AppendEntriesRequest of (ae_args * (ae_res Lwt_mvar.t[@opaque]))
+    | AppendEntriesResponse of (ae_args * ae_res)
     | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVotesResponse of rv_res
     | CommandReceived of
@@ -25,13 +25,13 @@ end
 
 module Make (Ae : Append_entries.S) (Rv : Request_votes.S) (M : Machine.S) :
   S
-    with type ae_arg = Ae.args
+    with type ae_args = Ae.args
      and type ae_res = Ae.res
      and type rv_arg = Rv.args
      and type rv_res = Rv.res
      and type command_input = M.input
      and type command_output = M.output = struct
-  type ae_arg = Ae.args [@@deriving sexp]
+  type ae_args = Ae.args [@@deriving sexp]
 
   type ae_res = Ae.res [@@deriving sexp]
 
@@ -46,8 +46,8 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) (M : Machine.S) :
   type t =
     | ElectionTimeout
     | SendHeartbeat
-    | AppendEntriesRequest of (ae_arg * (ae_res Lwt_mvar.t[@opaque]))
-    | AppendEntriesResponse of ae_res
+    | AppendEntriesRequest of (ae_args * (ae_res Lwt_mvar.t[@opaque]))
+    | AppendEntriesResponse of (ae_args * ae_res)
     | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVotesResponse of rv_res
     | CommandReceived of

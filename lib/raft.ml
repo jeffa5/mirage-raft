@@ -6,7 +6,7 @@ module Make
     (P : Plog.S)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_votes.S)
-    (M : Machine.S) =
+    (M : Machine.S with type input = P.entry) =
 struct
   module Ev = Event.Make (Ae) (Rv) (M)
   module Ac = Action.Make (Ae) (Rv) (M)
@@ -17,7 +17,7 @@ struct
     timeout : int * int;
     heartbeat : int;
     ae_requests : (Ae.args * Ae.res Lwt_mvar.t) Lwt_stream.t;
-    ae_responses : Ae.res Lwt_stream.t;
+    ae_responses : (Ae.args * Ae.res) Lwt_stream.t;
     rv_requests : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
     rv_responses : Rv.res Lwt_stream.t;
   }
@@ -44,15 +44,17 @@ struct
   let reset_election_timeout = Lwt_mvar.create_empty ()
 
   let handle_action (s : S.t) = function
-    | Ac.AppendEntriesRequest args ->
+    | Ac.AppendEntriesRequest (id, args) ->
         List.iter
-          (fun (_, uri) -> Lwt.async (fun () -> Ae.send uri args))
+          (fun (p : S.peer) ->
+            if p.id = id then Lwt.async (fun () -> Ae.send p.address args))
           s.peers
         |> Lwt.return
     | Ac.AppendEntriesResponse (res, mvar) -> Lwt_mvar.put mvar res
-    | Ac.RequestVotesRequest args ->
+    | Ac.RequestVotesRequest (id, args) ->
         List.iter
-          (fun (_, uri) -> Lwt.async (fun () -> Rv.send uri args))
+          (fun (p : S.peer) ->
+            if p.id = id then Lwt.async (fun () -> Rv.send p.address args))
           s.peers
         |> Lwt.return
     | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res

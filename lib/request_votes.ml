@@ -7,7 +7,8 @@ module type S = sig
   }
   [@@deriving make, sexp]
 
-  type res = { term : int; vote_granted : bool } [@@deriving make, sexp]
+  type res = { id : int; term : int; vote_granted : bool }
+  [@@deriving make, sexp]
 
   val send : Uri_sexp.t -> args -> unit Lwt.t
   (** [request_votes] is invoked by candidates to gather votes

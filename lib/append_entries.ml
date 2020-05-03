@@ -11,7 +11,7 @@ module type S = sig
   }
   [@@deriving make, sexp]
 
-  type res = { term : int; success : bool } [@@deriving make, sexp]
+  type res = { id : int; term : int; success : bool } [@@deriving make, sexp]
 
   val send : Uri_sexp.t -> args -> unit Lwt.t
   (** [append_entries] is invoked by leader to replicate log entries; also used as heartbeat.

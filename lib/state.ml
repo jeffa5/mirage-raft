@@ -6,16 +6,16 @@ module Make
     (P : Plog.S)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_votes.S)
-    (M : Machine.S)
+    (M : Machine.S with type input = P.entry)
     (Ev : Event.S
-            with type ae_arg := Ae.args
+            with type ae_args := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
              and type command_input := M.input
              and type command_output := M.output)
     (Ac : Action.S
-            with type ae_arg := Ae.args
+            with type ae_args := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
@@ -25,50 +25,82 @@ struct
     module Mp = Map.Make (Int)
     include Mp
 
-    type t = M.input Mp.t
+    type t = M.output option Lwt_mvar.t Mp.t
 
-    let t_of_sexp s = [%of_sexp: (int * M.input) list] s |> Mp.of_list
+    let t_of_sexp s =
+      [%of_sexp: (int * (M.output option Lwt_mvar.t[@opaque])) list] s
+      |> Mp.of_list
 
-    let sexp_of_t t = Mp.to_list t |> [%sexp_of: (int * M.input) list]
+    let sexp_of_t t =
+      Mp.to_list t
+      |> [%sexp_of: (int * (M.output option Lwt_mvar.t[@opaque])) list]
   end
 
   type stage = Leader | Candidate | Follower [@@deriving sexp]
 
+  type peer = {
+    id : int;
+    address : Uri_sexp.t;
+    next_index : int; [@default 0]
+    match_index : int; [@default 0]
+  }
+  [@@deriving make, sexp]
+
   type t = {
     stage : stage; [@default Follower]
     id : int;
-    peers : (int * Uri_sexp.t) list;
+    peers : peer list;
     log : P.t;
     commit_index : int; [@default 0]
     last_applied : int; [@default 0]
     votes_received : int; [@default 0]
-    next_index : int list;
-    match_index : int list;
-    machine : M.t;
+    machine : M.t; [@default M.v ()]
     replicating : CommandMap.t; [@default CommandMap.empty]
   }
   [@@deriving make, sexp]
 
+  let handle_send_heartbeat (t : t) =
+    match t.stage with
+    | Follower | Candidate -> Lwt.return (t, [])
+    | Leader ->
+        let* term = P.current_term t.log in
+        let leader_id = t.id in
+        let leader_commit = t.commit_index in
+        let+ actions =
+          Lwt_list.map_s
+            (fun peer ->
+              let prev_log_index = peer.next_index - 1 in
+              let* prev_entry = P.get t.log prev_log_index in
+              let prev_log_term =
+                match prev_entry with None -> -1 | Some e -> e.term
+              in
+              if t.last_applied >= peer.next_index then
+                let+ entries = P.get_from t.log peer.next_index in
+                let args =
+                  Ae.make_args ~term ~leader_id ~prev_log_index ~prev_log_term
+                    ~entries ~leader_commit ()
+                in
+                Ac.AppendEntriesRequest (peer.id, args)
+              else
+                let args =
+                  Ae.make_args ~term ~leader_id ~prev_log_index ~prev_log_term
+                    ~leader_commit ()
+                in
+                Lwt.return (Ac.AppendEntriesRequest (peer.id, args)))
+            t.peers
+        in
+        (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
+        (t, actions)
+
   let become_leader (t : t) =
-    let* term = P.current_term t.log in
-    let+ log = P.set_voted_for t.log None in
-    let t =
-      {
-        t with
-        next_index =
-          List.init (List.length t.peers) (fun _ -> t.commit_index + 1);
-        match_index = List.init (List.length t.peers) (fun _ -> 0);
-        stage = Leader;
-        log;
-        votes_received = 0;
-      }
+    let* log = P.set_voted_for t.log None in
+    let peers =
+      List.map
+        (fun p -> { p with next_index = t.commit_index + 1; match_index = 0 })
+        t.peers
     in
-    let heartbeat =
-      Ac.AppendEntriesRequest
-        (Ae.make_args ~term ~leader_id:t.id ~prev_log_index:t.commit_index
-           ~prev_log_term:t.commit_index ~leader_commit:t.commit_index ())
-    in
-    (t, [ heartbeat ])
+    let t = { t with peers; stage = Leader; log; votes_received = 0 } in
+    handle_send_heartbeat t
 
   let become_candidate (t : t) =
     let* term = P.current_term t.log in
@@ -79,7 +111,11 @@ struct
     let rv_args =
       Rv.make_args ~term ~candidate_id:t.id ~last_log_index:0 ~last_log_term:0
     in
-    (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesRequest rv_args ])
+
+    ( t,
+      [ Ac.ResetElectionTimeout ]
+      @ (List.map (fun (p : peer) -> Ac.RequestVotesRequest (p.id, rv_args)))
+          t.peers )
 
   let become_follower (t : t) term =
     let* log = P.set_current_term t.log term in
@@ -98,54 +134,68 @@ struct
             become_leader { t with log }
         | _ -> become_candidate t )
 
-  let handle_send_heartbeat (t : t) =
-    match t.stage with
-    | Follower | Candidate -> Lwt.return (t, [])
-    | Leader ->
-        let+ term = P.current_term t.log in
-        let ae_args =
-          Ae.make_args ~term ~leader_id:t.id ~prev_log_index:t.last_applied
-            ~prev_log_term:term ~leader_commit:t.commit_index ()
-        in
-        (t, [ Ac.AppendEntriesRequest ae_args ])
-
   let handle_append_entries_request (t : t)
       ((req, mvar) : Ae.args * Ae.res Lwt_mvar.t) =
-    (* if leader_commit_index  > last_applied, increment last_applied, apply log[last_applied] to state machine *)
-    let* t =
+    let* t, actions =
+      if req.leader_commit > t.last_applied then
+        let last_applied = t.last_applied + 1 in
+        let+ input = P.get t.log t.last_applied in
+        match input with
+        | None -> ({ t with last_applied }, [])
+        | Some input ->
+            let machine, output = M.apply t.machine input in
+            let mvar = CommandMap.find last_applied t.replicating in
+            let actions =
+              match mvar with
+              | None -> []
+              | Some mvar -> [ Ac.CommandResponse (Some output, mvar) ]
+            in
+            ({ t with last_applied; machine }, actions)
+      else Lwt.return (t, [])
+    in
+
+    let* t, actions =
       let* current_term = P.current_term t.log in
       if req.term > current_term then
-        let+ t, _ = become_follower t req.term in
-        t
-      else Lwt.return t
+        let+ t, a = become_follower t req.term in
+        (t, actions @ a)
+      else Lwt.return (t, actions)
     in
     let* current_term = P.current_term t.log in
     if req.term < current_term then
-      let response = Ae.make_res ~term:current_term ~success:false in
+      let response = Ae.make_res ~id:t.id ~term:current_term ~success:false in
       Lwt.return
         ( t,
-          [ Ac.ResetElectionTimeout; Ac.AppendEntriesResponse (response, mvar) ]
-        )
+          actions
+          @ [
+              Ac.ResetElectionTimeout; Ac.AppendEntriesResponse (response, mvar);
+            ] )
     else
       let* prev_log_index_entry = P.get t.log req.prev_log_index in
       match prev_log_index_entry with
       | None ->
-          let response = Ae.make_res ~term:current_term ~success:false in
+          let response =
+            Ae.make_res ~id:t.id ~term:current_term ~success:false
+          in
           Lwt.return
             ( t,
-              [
-                Ac.ResetElectionTimeout;
-                Ac.AppendEntriesResponse (response, mvar);
-              ] )
-      | Some entry ->
-          if entry.term <> req.prev_log_term then
-            let response = Ae.make_res ~term:current_term ~success:false in
-            Lwt.return
-              ( t,
-                [
+              actions
+              @ [
                   Ac.ResetElectionTimeout;
                   Ac.AppendEntriesResponse (response, mvar);
                 ] )
+      | Some entry ->
+          if entry.term <> req.prev_log_term then
+            let response =
+              Ae.make_res ~id:t.id ~term:current_term ~success:false
+            in
+            Lwt.return
+              ( t,
+                actions
+                @ [
+                    Ac.ResetElectionTimeout;
+                    Ac.AppendEntriesResponse (response, mvar);
+                  ] )
           else
             let* t, _ =
               Lwt_list.fold_left_s
@@ -169,7 +219,9 @@ struct
                 (t, req.prev_log_index + 1)
                 req.entries
             in
-            let response = Ae.make_res ~term:current_term ~success:true in
+            let response =
+              Ae.make_res ~id:t.id ~term:current_term ~success:true
+            in
             if req.leader_commit > t.commit_index then
               let t =
                 {
@@ -181,22 +233,61 @@ struct
               in
               Lwt.return
                 ( t,
-                  [
-                    Ac.ResetElectionTimeout;
-                    Ac.AppendEntriesResponse (response, mvar);
-                  ] )
+                  actions
+                  @ [
+                      Ac.ResetElectionTimeout;
+                      Ac.AppendEntriesResponse (response, mvar);
+                    ] )
             else
               Lwt.return
                 ( t,
-                  [
-                    Ac.ResetElectionTimeout;
-                    Ac.AppendEntriesResponse (response, mvar);
-                  ] )
+                  actions
+                  @ [
+                      Ac.ResetElectionTimeout;
+                      Ac.AppendEntriesResponse (response, mvar);
+                    ] )
 
-  let handle_append_entries_response (t : t) (res : Ae.res) =
+  let handle_append_entries_response (t : t) ((args, res) : Ae.args * Ae.res) =
     let* current_term = P.current_term t.log in
     if res.term > current_term then become_follower t res.term
-    else Lwt.return (t, [])
+    else
+      match t.stage with
+      | Follower | Candidate -> Lwt.return (t, [])
+      | Leader ->
+          let* term = P.current_term t.log in
+          let+ peers, actions =
+            Lwt_list.fold_left_s
+              (fun (ps, acs) (p : peer) ->
+                if p.id = res.id then
+                  if res.success then
+                    (* update next_index and match_index for follower *)
+                    let next_index =
+                      args.prev_log_index + List.length args.entries + 1
+                    in
+                    let match_index =
+                      p.match_index + List.length args.entries
+                    in
+                    let p = { p with next_index; match_index } in
+                    Lwt.return (p :: ps, acs)
+                  else
+                    (* decrement next_index and retry *)
+                    let next_index = p.next_index - 1 in
+                    let p = { p with next_index } in
+                    let* entries = P.get_from t.log next_index in
+                    let prev_log_index = next_index - 1 in
+                    let+ prev_entry = P.get t.log prev_log_index in
+                    let prev_log_term =
+                      match prev_entry with None -> -1 | Some e -> e.term
+                    in
+                    let args =
+                      Ae.make_args ~term ~leader_id:t.id ~prev_log_index
+                        ~prev_log_term ~entries ~leader_commit:t.commit_index ()
+                    in
+                    (p :: ps, Ac.AppendEntriesRequest (p.id, args) :: acs)
+                else Lwt.return (p :: ps, acs))
+              ([], []) t.peers
+          in
+          ({ t with peers }, actions)
 
   let handle_request_votes_request (t : t)
       ((req, mvar) : Rv.args * Rv.res Lwt_mvar.t) =
@@ -209,7 +300,7 @@ struct
     in
     let* term = P.current_term t.log in
     if req.term < term then
-      let resp = Rv.make_res ~term ~vote_granted:false in
+      let resp = Rv.make_res ~id:t.id ~term ~vote_granted:false in
       Lwt.return
         (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
     else
@@ -221,17 +312,17 @@ struct
             { t with log }
           in
           (* check that candidate's log is at least as up to date as receiver's log *)
-          let resp = Rv.make_res ~term ~vote_granted:true in
+          let resp = Rv.make_res ~id:t.id ~term ~vote_granted:true in
           (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
       | Some i when i = req.candidate_id ->
           (* check that candidate's log is at least as up to date as receiver's log *)
-          let resp = Rv.make_res ~term ~vote_granted:true in
+          let resp = Rv.make_res ~id:t.id ~term ~vote_granted:true in
           Lwt.return
             ( t,
               [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ]
             )
       | Some _ ->
-          let resp = Rv.make_res ~term ~vote_granted:false in
+          let resp = Rv.make_res ~id:t.id ~term ~vote_granted:false in
           Lwt.return
             ( t,
               [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ]
@@ -251,10 +342,39 @@ struct
       else Lwt.return (t, [])
 
   let handle_command (t : t)
-      ((_com, mvar) : M.input * M.output option Lwt_mvar.t) =
+      ((com, mvar) : M.input * M.output option Lwt_mvar.t) =
     match t.stage with
     | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
-    | Leader -> Lwt.return (t, [ (* replicate *) ])
+    | Leader ->
+        let last_applied = t.last_applied + 1 in
+        let* log = P.insert t.log last_applied com in
+        let replicating = CommandMap.add last_applied mvar t.replicating in
+        let t = { t with log; replicating; last_applied } in
+        let* term = P.current_term t.log in
+        let leader_id = t.id in
+        let leader_commit = t.commit_index in
+
+        let+ actions =
+          Lwt_list.filter_map_s
+            (fun peer ->
+              if t.last_applied >= peer.next_index then
+                let* entries = P.get_from t.log peer.next_index in
+                let prev_log_index = peer.next_index - 1 in
+                let+ prev_entry = P.get t.log prev_log_index in
+                let prev_log_term =
+                  match prev_entry with None -> -1 | Some e -> e.term
+                in
+                let args =
+                  Ae.make_args ~term ~leader_id ~prev_log_index ~prev_log_term
+                    ~entries ~leader_commit ()
+                in
+                Some (Ac.AppendEntriesRequest (peer.id, args))
+              else Lwt.return_none)
+            t.peers
+        in
+
+        (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
+        (t, actions)
 
   let handle t event =
     match event with

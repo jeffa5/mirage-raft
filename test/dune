@@ -1,0 +1,6 @@
+(tests
+ (names main)
+ (preprocess
+  (pps ppx_deriving.make ppx_sexp_conv))
+ (libraries uri asetmap sexplib0 uri-sexp mirage-raft alcotest alcotest-lwt
+   qcheck-core qcheck-alcotest lwt lwt.unix))
