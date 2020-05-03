@@ -99,7 +99,11 @@ let plog_entry =
     pair small_nat small_string
     |> map (fun (term, command) -> P.make_entry ~term ~command))
 
-type input = Event of int * Ev.t | Rpc of int | RestartServer of int
+type input =
+  | Event of int * Ev.t
+  | Rpc of int
+  | DropRpc of int
+  | RestartServer of int
 [@@deriving sexp]
 
 let input =
@@ -117,6 +121,7 @@ let input =
              ])
         |> map (fun (i, e) -> Event (i, e));
         small_nat |> map (fun i -> Rpc i);
+        small_nat |> map (fun i -> DropRpc i);
         map (fun i -> RestartServer i) (0 -- 2);
       ])
 
@@ -274,7 +279,15 @@ let states =
                              ([], []) servers
                          in
                          ( (Some (Event (i, rpc)), servers) :: states,
-                           List.rev rest @ rpcs ) ))
+                           List.rev rest @ rpcs ) )
+                 | DropRpc i ->
+                     let rpcs =
+                       List.mapi
+                         (fun index r -> if index = i then None else Some r)
+                         rpcs
+                       |> List.filter_map (fun i -> i)
+                     in
+                     Lwt.return ((Some input, servers) :: states, rpcs))
                ([ (None, servers) ], [])
                inputs
            in
