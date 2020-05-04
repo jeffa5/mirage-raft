@@ -2,6 +2,12 @@ open Sexplib0.Sexp_conv
 open Asetmap
 open Lwt.Syntax
 
+let rec zip xs ys =
+  match (xs, ys) with
+  | _, [] -> []
+  | [], _ -> []
+  | x :: xs, y :: ys -> (x, y) :: zip xs ys
+
 module P = struct
   type entry = { term : int; command : string } [@@deriving make, sexp]
 
@@ -340,4 +346,61 @@ let election_safety =
         in
         Lwt_main.run lwt))
 
-let tests = List.map QCheck_alcotest.to_alcotest [ election_safety ]
+let leader_append_only =
+  QCheck.(
+    Test.make ~count:10_000
+      ~name:
+        "Leader append-only: a leader never overwrites or deletes entries in \
+         its log; it only appends new entries"
+      states (fun states ->
+        let lwt =
+          let rec compare_logs (o : P.item list) (n : P.item list) =
+            match (o, n) with
+            | [], [] -> true
+            | [], _ -> true
+            | _, [] -> false
+            | x :: xs, y :: ys -> if x = y then compare_logs xs ys else false
+          in
+          let server id p1id p2id =
+            let+ log = P.v () in
+            let peers =
+              [
+                State.make_peer ~id:p1id ~address:Uri.empty ();
+                State.make_peer ~id:p2id ~address:Uri.empty ();
+              ]
+            in
+            State.make ~id ~peers ~log ()
+          in
+          let* servers =
+            [ server 0 1 2; server 1 0 2; server 2 0 1 ]
+            |> Lwt_list.map_s (fun i -> i)
+          in
+          let* states = states in
+          let+ _, ok =
+            Lwt_list.fold_left_s
+              (fun (old_servers, ok) state ->
+                let _, servers = state in
+                let+ new_servers, ok =
+                  Lwt_list.fold_left_s
+                    (fun (new_servers, ok) ((o, s) : State.t * State.t) ->
+                      if ok then
+                        match s.stage with
+                        | Leader ->
+                            let ok =
+                              compare_logs (List.rev o.log.items)
+                                (List.rev s.log.items)
+                            in
+                            Lwt.return (s :: new_servers, ok)
+                        | _ -> Lwt.return (s :: new_servers, ok)
+                      else Lwt.return (s :: new_servers, false))
+                    ([], ok) (zip old_servers servers)
+                in
+                (List.rev new_servers, ok))
+              (servers, true) states
+          in
+          ok
+        in
+        Lwt_main.run lwt))
+
+let tests =
+  List.map QCheck_alcotest.to_alcotest [ election_safety; leader_append_only ]
