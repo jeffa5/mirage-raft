@@ -29,6 +29,9 @@ struct
     let+ state =
       let+ log = P.v () in
       let machine = M.v () in
+      let peers =
+        List.map (fun (id, address) -> S.make_peer ~id ~address ()) peers
+      in
       S.make ~id ~peers ~log ~machine ()
     in
     {
