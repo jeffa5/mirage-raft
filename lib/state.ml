@@ -143,7 +143,7 @@ struct
         match input with
         | None -> ({ t with last_applied }, [])
         | Some input ->
-            let machine, output = M.apply t.machine input in
+            let machine, output = M.apply input t.machine in
             let mvar = CommandMap.find last_applied t.replicating in
             let actions =
               match mvar with

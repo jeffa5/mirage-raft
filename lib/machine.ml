@@ -9,5 +9,5 @@ module type S = sig
 
   val v : unit -> t
 
-  val apply : t -> input -> t * output
+  val apply : input -> t -> t * output
 end

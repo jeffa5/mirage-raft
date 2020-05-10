@@ -95,7 +95,7 @@ module M = struct
 
   let v () = 0
 
-  let apply t (input : input) = (t + input.term, input.term)
+  let apply (input : input) t = (t + input.term, input.term)
 end
 
 module Ev = Mirage_raft.Event.Make (Ae) (Rv) (M)
