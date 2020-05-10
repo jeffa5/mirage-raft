@@ -9,7 +9,9 @@ let rec zip xs ys =
   | x :: xs, y :: ys -> (x, y) :: zip xs ys
 
 module P = struct
-  type entry = { term : int; command : string } [@@deriving make, sexp]
+  type command = string [@@deriving sexp]
+
+  type entry = { term : int; command : command } [@@deriving make, sexp]
 
   type item = int * entry [@@deriving sexp]
 

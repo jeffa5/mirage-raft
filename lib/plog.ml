@@ -3,7 +3,9 @@
 module type S = sig
   type t [@@deriving sexp]
 
-  type entry = { term : int; command : string } [@@deriving sexp]
+  type command
+
+  type entry = { term : int; command : command } [@@deriving sexp]
 
   val v : unit -> t Lwt.t
   (** initialise the persistent log, loading data from previous state as available *)
