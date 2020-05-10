@@ -8,8 +8,20 @@ let rec zip xs ys =
   | [], _ -> []
   | x :: xs, y :: ys -> (x, y) :: zip xs ys
 
+module M = struct
+  type t = string [@@deriving sexp]
+
+  type input = string [@@deriving sexp]
+
+  type output = string [@@deriving sexp]
+
+  let v () = ""
+
+  let apply input t = (t ^ input, input)
+end
+
 module P = struct
-  type command = string [@@deriving sexp]
+  type command = M.input [@@deriving sexp]
 
   type entry = { term : int; command : command } [@@deriving make, sexp]
 
@@ -86,26 +98,9 @@ module Rv = struct
   let send _uri _args = Lwt.return_unit
 end
 
-module M = struct
-  type t = int [@@deriving sexp]
-
-  type input = Ae.plog_entry [@@deriving sexp]
-
-  type output = int [@@deriving sexp]
-
-  let v () = 0
-
-  let apply (input : input) t = (t + input.term, input.term)
-end
-
 module Ev = Mirage_raft.Event.Make (Ae) (Rv) (M)
 module Ac = Mirage_raft.Action.Make (Ae) (Rv) (M)
-module State = Mirage_raft.State.Make (P) (Ae) (Rv) (M) (Ev) (Ac)
-
-let plog_entry =
-  QCheck.(
-    pair small_nat small_string
-    |> map (fun (term, command) -> P.make_entry ~term ~command))
+module State = Mirage_raft.State.Make (M) (P) (Ae) (Rv) (Ev) (Ac)
 
 type input =
   | Event of int * Ev.t
@@ -123,7 +118,7 @@ let input =
              [
                always Ev.ElectionTimeout;
                always Ev.SendHeartbeat;
-               plog_entry
+               small_string
                |> map (fun i ->
                       Ev.CommandReceived (i, Lwt_mvar.create_empty ()));
              ])

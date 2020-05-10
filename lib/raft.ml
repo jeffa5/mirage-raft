@@ -3,14 +3,14 @@ open Lwt.Syntax
 module Make
     (Time : Mirage_time.S)
     (Random : Mirage_random.S)
-    (P : Plog.S)
+    (M : Machine.S)
+    (P : Plog.S with type command = M.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
-    (Rv : Request_votes.S)
-    (M : Machine.S with type input = P.entry) =
+    (Rv : Request_votes.S) =
 struct
   module Ev = Event.Make (Ae) (Rv) (M)
   module Ac = Action.Make (Ae) (Rv) (M)
-  module S = State.Make (P) (Ae) (Rv) (M) (Ev) (Ac)
+  module S = State.Make (M) (P) (Ae) (Rv) (Ev) (Ac)
 
   type t = {
     state : S.t;

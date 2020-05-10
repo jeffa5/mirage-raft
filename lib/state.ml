@@ -3,10 +3,10 @@ open Lwt.Syntax
 open Asetmap
 
 module Make
-    (P : Plog.S)
+    (M : Machine.S)
+    (P : Plog.S with type command = M.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_votes.S)
-    (M : Machine.S with type input = P.entry)
     (Ev : Event.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
@@ -139,11 +139,11 @@ struct
     let* t, actions =
       if req.leader_commit > t.last_applied then
         let last_applied = t.last_applied + 1 in
-        let+ input = P.get t.log t.last_applied in
-        match input with
+        let+ entry = P.get t.log t.last_applied in
+        match entry with
         | None -> ({ t with last_applied }, [])
-        | Some input ->
-            let machine, output = M.apply input t.machine in
+        | Some entry ->
+            let machine, output = M.apply entry.command t.machine in
             let mvar = CommandMap.find last_applied t.replicating in
             let actions =
               match mvar with
@@ -342,15 +342,15 @@ struct
       else Lwt.return (t, [])
 
   let handle_command (t : t)
-      ((com, mvar) : M.input * M.output option Lwt_mvar.t) =
+      ((command, mvar) : M.input * M.output option Lwt_mvar.t) =
     match t.stage with
     | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
     | Leader ->
         let last_applied = t.last_applied + 1 in
-        let* log = P.insert t.log last_applied com in
+        let* term = P.current_term t.log in
+        let* log = P.insert t.log last_applied (P.make_entry ~term ~command) in
         let replicating = CommandMap.add last_applied mvar t.replicating in
         let t = { t with log; replicating; last_applied } in
-        let* term = P.current_term t.log in
         let leader_id = t.id in
         let leader_commit = t.commit_index in
 
