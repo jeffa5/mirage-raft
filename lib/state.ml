@@ -153,7 +153,6 @@ struct
             ({ t with last_applied; machine }, actions)
       else Lwt.return (t, [])
     in
-
     let* t, actions =
       let* current_term = P.current_term t.log in
       if req.term > current_term then
@@ -248,27 +247,85 @@ struct
                     ] )
 
   let handle_append_entries_response (t : t) ((args, res) : Ae.args * Ae.res) =
-    let* current_term = P.current_term t.log in
-    if res.term > current_term then become_follower t res.term
+    let* term = P.current_term t.log in
+    if res.term > term then become_follower t res.term
     else
       match t.stage with
       | Follower | Candidate -> Lwt.return (t, [])
       | Leader ->
-          let* term = P.current_term t.log in
-          let+ peers, actions =
-            Lwt_list.fold_left_s
-              (fun (ps, acs) (p : peer) ->
-                if p.id = res.id then
-                  if res.success then
+          if res.term <> term then Lwt.return (t, [])
+          else
+            let+ t, peers, actions =
+              Lwt_list.fold_left_s
+                (fun (t, ps, acs) (p : peer) ->
+                  if p.id <> res.id then Lwt.return (t, p :: ps, acs)
+                  else if res.success then
                     (* update next_index and match_index for follower *)
-                    let next_index =
-                      args.prev_log_index + List.length args.entries + 1
-                    in
-                    let match_index =
-                      p.match_index + List.length args.entries
-                    in
+                    let next_index = p.next_index + List.length args.entries in
+                    let match_index = next_index - 1 in
                     let p = { p with next_index; match_index } in
-                    Lwt.return (p :: ps, acs)
+                    let saved_commit_index = t.commit_index in
+
+                    let* current_term = P.current_term t.log in
+                    let* entries_since_commit_index =
+                      P.get_from t.log (saved_commit_index + 1)
+                    in
+                    (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
+                    let commit_index =
+                      List.fold_left
+                        (fun ci ((i, entry) : int * P.entry) ->
+                          if entry.term == current_term then
+                            let match_count =
+                              List.fold_left
+                                (fun count peer ->
+                                  if peer.match_index >= i then count + 1
+                                  else count)
+                                1 t.peers
+                            in
+
+                            if match_count * 2 > List.length t.peers + 1 then i
+                            else ci
+                          else ci)
+                        saved_commit_index
+                        (List.mapi
+                           (fun i e -> (i, e))
+                           entries_since_commit_index)
+                    in
+                    let* t, actions =
+                      if commit_index <> saved_commit_index then
+                        let t = { t with commit_index } in
+                        if t.commit_index <= t.last_applied then
+                          Lwt.return (t, [])
+                        else
+                          let t = { t with last_applied = t.commit_index } in
+                          let+ entries =
+                            List.init (t.commit_index - t.last_applied)
+                              (fun i -> i + t.last_applied)
+                            |> Lwt_list.filter_map_s (fun i ->
+                                   let+ entry = P.get t.log i in
+                                   match entry with
+                                   | None -> None
+                                   | Some e -> Some (i, e))
+                          in
+
+                          List.fold_left
+                            (fun (t, actions) ((i, e) : int * P.entry) ->
+                              let command_mvar =
+                                CommandMap.find i t.replicating
+                              in
+                              match command_mvar with
+                              | None -> (t, actions)
+                              | Some mvar ->
+                                  let machine, output =
+                                    M.apply e.command t.machine
+                                  in
+                                  ( { t with machine },
+                                    Ac.CommandResponse (Some output, mvar)
+                                    :: actions ))
+                            (t, []) entries
+                      else Lwt.return (t, [])
+                    in
+                    Lwt.return (t, p :: ps, acs @ actions)
                   else
                     (* decrement next_index and retry *)
                     let next_index = p.next_index - 1 in
@@ -283,11 +340,10 @@ struct
                       Ae.make_args ~term ~leader_id:t.id ~prev_log_index
                         ~prev_log_term ~entries ~leader_commit:t.commit_index ()
                     in
-                    (p :: ps, Ac.AppendEntriesRequest (p.id, args) :: acs)
-                else Lwt.return (p :: ps, acs))
-              ([], []) t.peers
-          in
-          ({ t with peers }, actions)
+                    (t, p :: ps, Ac.AppendEntriesRequest (p.id, args) :: acs))
+                (t, [], []) t.peers
+            in
+            ({ t with peers }, actions)
 
   let handle_request_votes_request (t : t)
       ((req, mvar) : Rv.args * Rv.res Lwt_mvar.t) =
