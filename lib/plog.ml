@@ -33,4 +33,7 @@ module type S = sig
 
   val get_from : t -> int -> entry list Lwt.t
   (** [get_from t i] returns the list of entries from index [i] inclusive *)
+
+  val last_entry : t -> (int * entry) Lwt.t
+  (** [last_entry t] returns the index and entry for the last log entry *)
 end

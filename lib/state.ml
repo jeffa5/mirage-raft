@@ -355,34 +355,45 @@ struct
       else Lwt.return t
     in
     let* term = P.current_term t.log in
+    (* reply false if term < current_term *)
     if req.term < term then
       let resp = Rv.make_res ~id:t.id ~term ~vote_granted:false in
       Lwt.return
         (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
     else
       let* voted_for = P.voted_for t.log in
-      match voted_for with
-      | None ->
-          let+ t =
-            let+ log = P.set_voted_for t.log (Some req.candidate_id) in
-            { t with log }
-          in
-          (* check that candidate's log is at least as up to date as receiver's log *)
-          let resp = Rv.make_res ~id:t.id ~term ~vote_granted:true in
+      let disallow_vote t =
+        let resp = Rv.make_res ~id:t.id ~term ~vote_granted:false in
+        Lwt.return
           (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
-      | Some i when i = req.candidate_id ->
+      in
+      let allow_vote t =
+        let+ t =
+          let+ log = P.set_voted_for t.log (Some req.candidate_id) in
+          { t with log }
+        in
+        let resp = Rv.make_res ~id:t.id ~term ~vote_granted:true in
+        (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
+      in
+      let vote () =
+        let* log_at_least_as_up_to_date =
           (* check that candidate's log is at least as up to date as receiver's log *)
-          let resp = Rv.make_res ~id:t.id ~term ~vote_granted:true in
-          Lwt.return
-            ( t,
-              [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ]
-            )
-      | Some _ ->
-          let resp = Rv.make_res ~id:t.id ~term ~vote_granted:false in
-          Lwt.return
-            ( t,
-              [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ]
-            )
+          let+ last_log_index, last_log_entry = P.last_entry t.log in
+          (* if last_entries have different terms then later term is more up-to-date *)
+          if last_log_entry.term > req.last_log_term then false
+          else if last_log_entry.term < req.last_log_term then true
+          else if
+            (* if have same term, the longer log is more up-to-date *)
+            last_log_index > req.last_log_index
+          then false
+          else (* last_log_index <= req.last_log_index *) true
+        in
+        if not log_at_least_as_up_to_date then disallow_vote t else allow_vote t
+      in
+      match voted_for with
+      | None -> vote ()
+      | Some i when i = req.candidate_id -> vote ()
+      | Some _ -> disallow_vote t
 
   let handle_request_votes_response (t : t) (res : Rv.res) =
     let* current_term = P.current_term t.log in
