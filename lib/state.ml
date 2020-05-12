@@ -103,19 +103,25 @@ struct
     handle_send_heartbeat t
 
   let become_candidate (t : t) =
+    (* increment current_term *)
     let* term = P.current_term t.log in
     let term = term + 1 in
     let* log = P.set_current_term t.log term in
-    let+ log = P.set_voted_for log (Some t.id) in
+    (* vote for self *)
+    let* log = P.set_voted_for log (Some t.id) in
     let t = { t with log; stage = Candidate; votes_received = 1 } in
-    let rv_args =
-      Rv.make_args ~term ~candidate_id:t.id ~last_log_index:0 ~last_log_term:0
+    (* send request_vote rpcs to all other servers *)
+    let+ request_votes =
+      let+ last_log_index, last_log_entry = P.last_entry t.log in
+      let rv_args =
+        Rv.make_args ~term ~candidate_id:t.id ~last_log_index
+          ~last_log_term:last_log_entry.term
+      in
+      List.map
+        (fun (p : peer) -> Ac.RequestVotesRequest (p.id, rv_args))
+        t.peers
     in
-
-    ( t,
-      [ Ac.ResetElectionTimeout ]
-      @ (List.map (fun (p : peer) -> Ac.RequestVotesRequest (p.id, rv_args)))
-          t.peers )
+    (t, Ac.ResetElectionTimeout :: request_votes)
 
   let become_follower (t : t) term =
     let* log = P.set_current_term t.log term in
