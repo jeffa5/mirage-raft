@@ -402,35 +402,12 @@ struct
     match t.stage with
     | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
     | Leader ->
-        let last_applied = t.last_applied + 1 in
+        let commit_index = t.commit_index + 1 in
         let* term = P.current_term t.log in
-        let* log = P.insert t.log last_applied (P.make_entry ~term ~command) in
-        let replicating = CommandMap.add last_applied mvar t.replicating in
-        let t = { t with log; replicating; last_applied } in
-        let leader_id = t.id in
-        let leader_commit = t.commit_index in
-
-        let+ actions =
-          Lwt_list.filter_map_s
-            (fun peer ->
-              if t.last_applied >= peer.next_index then
-                let* entries = P.get_from t.log peer.next_index in
-                let prev_log_index = peer.next_index - 1 in
-                let+ prev_entry = P.get t.log prev_log_index in
-                let prev_log_term =
-                  match prev_entry with None -> -1 | Some e -> e.term
-                in
-                let args =
-                  Ae.make_args ~term ~leader_id ~prev_log_index ~prev_log_term
-                    ~entries ~leader_commit ()
-                in
-                Some (Ac.AppendEntriesRequest (peer.id, args))
-              else Lwt.return_none)
-            t.peers
-        in
-
-        (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
-        (t, actions)
+        let* log = P.insert t.log commit_index (P.make_entry ~term ~command) in
+        let replicating = CommandMap.add t.commit_index mvar t.replicating in
+        let t = { t with replicating; log; commit_index } in
+        handle_send_heartbeat t
 
   let handle t event =
     match event with
