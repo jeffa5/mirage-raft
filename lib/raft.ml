@@ -200,7 +200,7 @@ struct
       let* () =
         if last.stage <> s.stage then
           Logs_lwt.info (fun f ->
-              f "In state %s"
+              f "State %s"
                 (Sexplib0.Sexp_conv.string_of_sexp @@ S.sexp_of_stage s.stage))
         else Lwt.return_unit
       in
@@ -210,7 +210,7 @@ struct
       | Some event ->
           let* () =
             Logs_lwt.debug (fun f ->
-                f "Handling event"
+                f "-> Event"
                   ~tags:
                     Logs.Tag.(empty |> add event_tag event |> add state_tag s))
           in
@@ -220,7 +220,7 @@ struct
               (fun a ->
                 let* () =
                   Logs_lwt.debug (fun f ->
-                      f "Processing action"
+                      f "<- Action"
                         ~tags:
                           Logs.Tag.(
                             empty |> add action_tag a |> add state_tag s))
