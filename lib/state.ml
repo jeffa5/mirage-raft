@@ -306,7 +306,7 @@ struct
       | Leader ->
           if res.term <> term then Lwt.return (t, [])
           else
-            let+ t, peers, actions =
+            let* t, peers, acs =
               Lwt_list.fold_left_s
                 (fun (t, ps, acs) (p : peer) ->
                   if p.id <> res.id then Lwt.return (t, p :: ps, acs)
@@ -315,9 +315,7 @@ struct
                     let next_index = p.next_index + List.length args.entries in
                     let match_index = max 0 (next_index - 1) in
                     let p = { p with next_index; match_index } in
-
-                    let* t, actions = apply_entries_to_machine t in
-                    Lwt.return (t, p :: ps, acs @ actions)
+                    Lwt.return (t, p :: ps, acs)
                   else
                     (* decrement next_index and retry *)
                     let next_index = max 0 (p.next_index - 1) in
@@ -335,7 +333,12 @@ struct
                     (t, p :: ps, Ac.AppendEntriesRequest (p.id, args) :: acs))
                 (t, [], []) t.peers
             in
-            ({ t with peers }, actions)
+            let t = { t with peers } in
+            let+ t, actions =
+              if res.success then apply_entries_to_machine t
+              else Lwt.return (t, [])
+            in
+            (t, acs @ actions)
 
   let handle_request_votes_request (t : t)
       ((req, mvar) : Rv.args * Rv.res Lwt_mvar.t) =
