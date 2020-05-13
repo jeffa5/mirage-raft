@@ -158,7 +158,6 @@ struct
       let t = { t with commit_index } in
       if t.commit_index <= t.last_applied then Lwt.return (t, [])
       else
-        let t = { t with last_applied = t.commit_index } in
         let+ entries =
           List.init (t.commit_index - t.last_applied) (fun i ->
               i + t.last_applied)
@@ -166,7 +165,7 @@ struct
                  let+ entry = P.get t.log i in
                  match entry with None -> None | Some e -> Some (i, e))
         in
-
+        let t = { t with last_applied = t.commit_index } in
         List.fold_left
           (fun (t, actions) ((i, e) : int * P.entry) ->
             let command_mvar = CommandMap.find i t.replicating in
