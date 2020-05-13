@@ -152,7 +152,9 @@ struct
             if match_count * 2 > List.length t.peers + 1 then i else ci
           else ci)
         saved_commit_index
-        (List.mapi (fun i e -> (i, e)) entries_since_commit_index)
+        (List.mapi
+           (fun i e -> (i + saved_commit_index + 1, e))
+           entries_since_commit_index)
     in
     if commit_index <> saved_commit_index then
       let t = { t with commit_index } in
