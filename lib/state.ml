@@ -134,11 +134,8 @@ struct
     ({ t with log; stage = Follower }, [ Ac.ResetElectionTimeout ])
 
   let apply_entries_to_machine t =
-    let saved_commit_index = t.commit_index in
     let* current_term = P.current_term t.log in
-    let* entries_since_commit_index =
-      P.get_from t.log (saved_commit_index + 1)
-    in
+    let* entries_since_commit_index = P.get_from t.log (t.commit_index + 1) in
     (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
     let commit_index =
       List.fold_left
@@ -150,15 +147,14 @@ struct
                   if peer.match_index >= i then count + 1 else count)
                 1 t.peers
             in
-
             if match_count * 2 > List.length t.peers + 1 then i else ci
           else ci)
-        saved_commit_index
+        t.commit_index
         (List.mapi
-           (fun i e -> (i + saved_commit_index + 1, e))
+           (fun i e -> (i + t.commit_index + 1, e))
            entries_since_commit_index)
     in
-    if commit_index <> saved_commit_index then
+    if commit_index <> t.commit_index then
       let t = { t with commit_index } in
       if t.commit_index <= t.last_applied then Lwt.return (t, [])
       else
@@ -315,7 +311,7 @@ struct
                   else if res.success then
                     (* update next_index and match_index for follower *)
                     let next_index = p.next_index + List.length args.entries in
-                    let match_index = max 0 (next_index - 1) in
+                    let match_index = next_index - 1 in
                     let p = { p with next_index; match_index } in
                     Lwt.return (t, p :: ps, acs)
                   else
@@ -410,11 +406,12 @@ struct
     match t.stage with
     | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
     | Leader ->
-        let commit_index = t.commit_index + 1 in
         let* term = P.current_term t.log in
-        let* log = P.insert t.log commit_index (P.make_entry ~term ~command) in
-        let replicating = CommandMap.add t.commit_index mvar t.replicating in
-        let t = { t with replicating; log; commit_index } in
+        let* last_log_index, _ = get_last_entry t.log in
+        let new_index = last_log_index + 1 in
+        let* log = P.insert t.log new_index (P.make_entry ~term ~command) in
+        let replicating = CommandMap.add new_index mvar t.replicating in
+        let t = { t with replicating; log } in
         handle_send_heartbeat t
 
   let handle t event =
