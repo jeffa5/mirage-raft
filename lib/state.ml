@@ -160,7 +160,7 @@ struct
       else
         let+ entries =
           List.init (t.commit_index - t.last_applied) (fun i ->
-              i + t.last_applied)
+              i + t.last_applied + 1)
           |> Lwt_list.filter_map_s (fun i ->
                  let+ entry = P.get t.log i in
                  match entry with None -> None | Some e -> Some (i, e))
