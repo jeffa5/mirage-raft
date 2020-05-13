@@ -69,7 +69,7 @@ struct
         let+ actions =
           Lwt_list.map_s
             (fun peer ->
-              let prev_log_index = peer.next_index - 1 in
+              let prev_log_index = max 0 (peer.next_index - 1) in
               let* prev_entry = P.get t.log prev_log_index in
               let prev_log_term =
                 match prev_entry with None -> -1 | Some e -> e.term
@@ -130,6 +130,54 @@ struct
     let* log = P.set_current_term t.log term in
     let+ log = P.set_voted_for log None in
     ({ t with log; stage = Follower }, [ Ac.ResetElectionTimeout ])
+
+  let apply_entries_to_machine t =
+    let saved_commit_index = t.commit_index in
+    let* current_term = P.current_term t.log in
+    let* entries_since_commit_index =
+      P.get_from t.log (saved_commit_index + 1)
+    in
+    (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
+    let commit_index =
+      List.fold_left
+        (fun ci ((i, entry) : int * P.entry) ->
+          if entry.term == current_term then
+            let match_count =
+              List.fold_left
+                (fun count peer ->
+                  if peer.match_index >= i then count + 1 else count)
+                1 t.peers
+            in
+
+            if match_count * 2 > List.length t.peers + 1 then i else ci
+          else ci)
+        saved_commit_index
+        (List.mapi (fun i e -> (i, e)) entries_since_commit_index)
+    in
+    if commit_index <> saved_commit_index then
+      let t = { t with commit_index } in
+      if t.commit_index <= t.last_applied then Lwt.return (t, [])
+      else
+        let t = { t with last_applied = t.commit_index } in
+        let+ entries =
+          List.init (t.commit_index - t.last_applied) (fun i ->
+              i + t.last_applied)
+          |> Lwt_list.filter_map_s (fun i ->
+                 let+ entry = P.get t.log i in
+                 match entry with None -> None | Some e -> Some (i, e))
+        in
+
+        List.fold_left
+          (fun (t, actions) ((i, e) : int * P.entry) ->
+            let command_mvar = CommandMap.find i t.replicating in
+            match command_mvar with
+            | None -> (t, actions)
+            | Some mvar ->
+                let machine, output = M.apply e.command t.machine in
+                ( { t with machine },
+                  Ac.CommandResponse (Some output, mvar) :: actions ))
+          (t, []) entries
+    else Lwt.return (t, [])
 
   let handle_timeout (t : t) =
     match t.stage with
@@ -271,76 +319,17 @@ struct
                   else if res.success then
                     (* update next_index and match_index for follower *)
                     let next_index = p.next_index + List.length args.entries in
-                    let match_index = next_index - 1 in
+                    let match_index = max 0 (next_index - 1) in
                     let p = { p with next_index; match_index } in
-                    let saved_commit_index = t.commit_index in
 
-                    let* current_term = P.current_term t.log in
-                    let* entries_since_commit_index =
-                      P.get_from t.log (saved_commit_index + 1)
-                    in
-                    (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
-                    let commit_index =
-                      List.fold_left
-                        (fun ci ((i, entry) : int * P.entry) ->
-                          if entry.term == current_term then
-                            let match_count =
-                              List.fold_left
-                                (fun count peer ->
-                                  if peer.match_index >= i then count + 1
-                                  else count)
-                                1 t.peers
-                            in
-
-                            if match_count * 2 > List.length t.peers + 1 then i
-                            else ci
-                          else ci)
-                        saved_commit_index
-                        (List.mapi
-                           (fun i e -> (i, e))
-                           entries_since_commit_index)
-                    in
-                    let* t, actions =
-                      if commit_index <> saved_commit_index then
-                        let t = { t with commit_index } in
-                        if t.commit_index <= t.last_applied then
-                          Lwt.return (t, [])
-                        else
-                          let t = { t with last_applied = t.commit_index } in
-                          let+ entries =
-                            List.init (t.commit_index - t.last_applied)
-                              (fun i -> i + t.last_applied)
-                            |> Lwt_list.filter_map_s (fun i ->
-                                   let+ entry = P.get t.log i in
-                                   match entry with
-                                   | None -> None
-                                   | Some e -> Some (i, e))
-                          in
-
-                          List.fold_left
-                            (fun (t, actions) ((i, e) : int * P.entry) ->
-                              let command_mvar =
-                                CommandMap.find i t.replicating
-                              in
-                              match command_mvar with
-                              | None -> (t, actions)
-                              | Some mvar ->
-                                  let machine, output =
-                                    M.apply e.command t.machine
-                                  in
-                                  ( { t with machine },
-                                    Ac.CommandResponse (Some output, mvar)
-                                    :: actions ))
-                            (t, []) entries
-                      else Lwt.return (t, [])
-                    in
+                    let* t, actions = apply_entries_to_machine t in
                     Lwt.return (t, p :: ps, acs @ actions)
                   else
                     (* decrement next_index and retry *)
-                    let next_index = p.next_index - 1 in
+                    let next_index = max 0 (p.next_index - 1) in
                     let p = { p with next_index } in
                     let* entries = P.get_from t.log next_index in
-                    let prev_log_index = next_index - 1 in
+                    let prev_log_index = max 0 (next_index - 1) in
                     let+ prev_entry = P.get t.log prev_log_index in
                     let prev_log_term =
                       match prev_entry with None -> -1 | Some e -> e.term
