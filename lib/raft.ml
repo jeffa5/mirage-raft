@@ -223,7 +223,7 @@ struct
                       f "<- Action"
                         ~tags:
                           Logs.Tag.(
-                            empty |> add action_tag a |> add state_tag s))
+                            empty |> add action_tag a |> add state_tag s'))
                 in
                 handle_action s a)
               actions
