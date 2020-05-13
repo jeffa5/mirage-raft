@@ -63,6 +63,18 @@ module P = struct
       (fun (index, e) -> if index >= i then Some e else None)
       t.items
     |> Lwt.return
+
+  let last_entry t =
+    match t.items with
+    | [] -> Lwt.return_none
+    | _ ->
+        let i, term =
+          List.fold_left
+            (fun (ci, term) (i, e) ->
+              if i > ci then (i, e.term) else (ci, term))
+            (-1, -1) t.items
+        in
+        Lwt.return_some (i, term)
 end
 
 module Ae = struct
