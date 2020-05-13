@@ -73,12 +73,13 @@ struct
         let+ actions =
           Lwt_list.map_s
             (fun peer ->
-              let prev_log_index = max 0 (peer.next_index - 1) in
-              let* prev_entry = P.get t.log prev_log_index in
-              let prev_log_term =
+              let* last_log_index, _ = get_last_entry t.log in
+              let prev_log_index = peer.next_index - 1 in
+              let* prev_log_term =
+                let+ prev_entry = P.get t.log prev_log_index in
                 match prev_entry with None -> -1 | Some e -> e.term
               in
-              if t.last_applied >= peer.next_index then
+              if last_log_index >= peer.next_index then
                 let+ entries = P.get_from t.log peer.next_index in
                 let args =
                   Ae.make_args ~term ~leader_id ~prev_log_index ~prev_log_term
