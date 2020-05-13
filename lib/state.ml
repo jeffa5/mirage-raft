@@ -102,6 +102,10 @@ struct
     let t = { t with peers; stage = Leader; log; votes_received = 0 } in
     handle_send_heartbeat t
 
+  let get_last_entry log =
+    let+ le = P.last_entry log in
+    match le with None -> (0, 0) | Some (i, t) -> (i, t)
+
   let become_candidate (t : t) =
     (* increment current_term *)
     let* term = P.current_term t.log in
@@ -112,10 +116,9 @@ struct
     let t = { t with log; stage = Candidate; votes_received = 1 } in
     (* send request_vote rpcs to all other servers *)
     let+ request_votes =
-      let+ last_log_index, last_log_entry = P.last_entry t.log in
+      let+ last_log_index, last_log_term = get_last_entry t.log in
       let rv_args =
-        Rv.make_args ~term ~candidate_id:t.id ~last_log_index
-          ~last_log_term:last_log_entry.term
+        Rv.make_args ~term ~candidate_id:t.id ~last_log_index ~last_log_term
       in
       List.map
         (fun (p : peer) -> Ac.RequestVotesRequest (p.id, rv_args))
@@ -384,10 +387,10 @@ struct
       let vote () =
         let* log_at_least_as_up_to_date =
           (* check that candidate's log is at least as up to date as receiver's log *)
-          let+ last_log_index, last_log_entry = P.last_entry t.log in
+          let+ last_log_index, last_log_term = get_last_entry t.log in
           (* if last_entries have different terms then later term is more up-to-date *)
-          if last_log_entry.term > req.last_log_term then false
-          else if last_log_entry.term < req.last_log_term then true
+          if last_log_term > req.last_log_term then false
+          else if last_log_term < req.last_log_term then true
           else if
             (* if have same term, the longer log is more up-to-date *)
             last_log_index > req.last_log_index
