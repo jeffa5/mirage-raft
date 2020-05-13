@@ -217,9 +217,10 @@ struct
         (t, actions @ a)
       else Lwt.return (t, actions)
     in
-    let* current_term = P.current_term t.log in
-    if req.term < current_term then
-      let response = Ae.make_res ~id:t.id ~term:current_term ~success:false in
+    let* term = P.current_term t.log in
+    if req.term < term then
+      (* reply false if term < current_term *)
+      let response = Ae.make_res ~id:t.id ~term ~success:false in
       Lwt.return
         ( t,
           actions
@@ -227,11 +228,40 @@ struct
               Ac.ResetElectionTimeout; Ac.AppendEntriesResponse (response, mvar);
             ] )
     else
-      let* prev_log_index_entry = P.get t.log req.prev_log_index in
-      match prev_log_index_entry with
-      | None ->
-          let response =
-            Ae.make_res ~id:t.id ~term:current_term ~success:false
+      let add_entries () =
+        let* t, _ =
+          Lwt_list.fold_left_s
+            (fun (t, i) (entry : Ae.plog_entry) ->
+              let* e = P.get t.log i in
+              match e with
+              | None -> Lwt.return (t, i + 1)
+              | Some e ->
+                  (* if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it *)
+                  if e.term = entry.term then Lwt.return (t, i + 1)
+                  else
+                    let+ log = P.delete_from t.log i in
+                    ({ t with log }, i + 1))
+            (t, req.prev_log_index + 1)
+            req.entries
+        in
+        let* t, _ =
+          Lwt_list.fold_left_s
+            (fun (t, i) entry ->
+              (* append any new entries not already in the log *)
+              let+ log = P.insert t.log i entry in
+              ({ t with log }, i + 1))
+            (t, req.prev_log_index + 1)
+            req.entries
+        in
+        let response = Ae.make_res ~id:t.id ~term ~success:true in
+        if req.leader_commit > t.commit_index then
+          let t =
+            {
+              t with
+              commit_index =
+                min req.leader_commit
+                  (req.prev_log_index + List.length req.entries);
+            }
           in
           Lwt.return
             ( t,
@@ -240,11 +270,22 @@ struct
                   Ac.ResetElectionTimeout;
                   Ac.AppendEntriesResponse (response, mvar);
                 ] )
+        else
+          Lwt.return
+            ( t,
+              actions
+              @ [
+                  Ac.ResetElectionTimeout;
+                  Ac.AppendEntriesResponse (response, mvar);
+                ] )
+      in
+      let* prev_log_index_entry = P.get t.log req.prev_log_index in
+      (* reply false if log doesn't contain an entry at prev_log_index whose term matches prev_log_term *)
+      match prev_log_index_entry with
+      | None -> add_entries ()
       | Some entry ->
           if entry.term <> req.prev_log_term then
-            let response =
-              Ae.make_res ~id:t.id ~term:current_term ~success:false
-            in
+            let response = Ae.make_res ~id:t.id ~term ~success:false in
             Lwt.return
               ( t,
                 actions
@@ -252,56 +293,7 @@ struct
                     Ac.ResetElectionTimeout;
                     Ac.AppendEntriesResponse (response, mvar);
                   ] )
-          else
-            let* t, _ =
-              Lwt_list.fold_left_s
-                (fun (t, i) (entry : Ae.plog_entry) ->
-                  let* e = P.get t.log i in
-                  match e with
-                  | None -> Lwt.return (t, i + 1)
-                  | Some e ->
-                      if e.term = entry.term then Lwt.return (t, i + 1)
-                      else
-                        let+ log = P.delete_from t.log i in
-                        ({ t with log }, i + 1))
-                (t, req.prev_log_index + 1)
-                req.entries
-            in
-            let* t, _ =
-              Lwt_list.fold_left_s
-                (fun (t, i) entry ->
-                  let+ log = P.insert t.log i entry in
-                  ({ t with log }, i + 1))
-                (t, req.prev_log_index + 1)
-                req.entries
-            in
-            let response =
-              Ae.make_res ~id:t.id ~term:current_term ~success:true
-            in
-            if req.leader_commit > t.commit_index then
-              let t =
-                {
-                  t with
-                  commit_index =
-                    min req.leader_commit
-                      (req.prev_log_index + List.length req.entries);
-                }
-              in
-              Lwt.return
-                ( t,
-                  actions
-                  @ [
-                      Ac.ResetElectionTimeout;
-                      Ac.AppendEntriesResponse (response, mvar);
-                    ] )
-            else
-              Lwt.return
-                ( t,
-                  actions
-                  @ [
-                      Ac.ResetElectionTimeout;
-                      Ac.AppendEntriesResponse (response, mvar);
-                    ] )
+          else add_entries ()
 
   let handle_append_entries_response (t : t) ((args, res) : Ae.args * Ae.res) =
     let* term = P.current_term t.log in
