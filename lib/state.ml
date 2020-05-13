@@ -59,6 +59,10 @@ struct
   }
   [@@deriving make, sexp]
 
+  let get_last_entry log =
+    let+ le = P.last_entry log in
+    match le with None -> (0, 0) | Some (i, t) -> (i, t)
+
   let handle_send_heartbeat (t : t) =
     match t.stage with
     | Follower | Candidate -> Lwt.return (t, [])
@@ -94,17 +98,14 @@ struct
 
   let become_leader (t : t) =
     let* log = P.set_voted_for t.log None in
-    let peers =
+    let* peers =
+      let+ last_log_index, _ = get_last_entry t.log in
       List.map
-        (fun p -> { p with next_index = t.commit_index + 1; match_index = 0 })
+        (fun p -> { p with next_index = last_log_index + 1; match_index = 0 })
         t.peers
     in
     let t = { t with peers; stage = Leader; log; votes_received = 0 } in
     handle_send_heartbeat t
-
-  let get_last_entry log =
-    let+ le = P.last_entry log in
-    match le with None -> (0, 0) | Some (i, t) -> (i, t)
 
   let become_candidate (t : t) =
     (* increment current_term *)
