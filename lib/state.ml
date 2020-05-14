@@ -172,7 +172,9 @@ struct
             match command_mvar with
             | None -> (t, actions)
             | Some mvar ->
-                (t, Ac.CommandResponse (Some e.command, mvar) :: actions))
+                let replicating = CommandMap.remove i t.replicating in
+                ( { t with replicating },
+                  Ac.CommandResponse (Some e.command, mvar) :: actions ))
           (t, []) entries
     else Lwt.return (t, [])
 
@@ -198,10 +200,15 @@ struct
         | None -> ({ t with last_applied }, [])
         | Some entry ->
             let mvar = CommandMap.find last_applied t.replicating in
-            let actions =
+            let t, actions =
               match mvar with
-              | None -> []
-              | Some mvar -> [ Ac.CommandResponse (Some entry.command, mvar) ]
+              | None -> (t, [])
+              | Some mvar ->
+                  let replicating =
+                    CommandMap.remove last_applied t.replicating
+                  in
+                  ( { t with replicating },
+                    [ Ac.CommandResponse (Some entry.command, mvar) ] )
             in
             ({ t with last_applied }, actions)
       else Lwt.return (t, [])
