@@ -6,7 +6,7 @@ module Make
     (M : Machine.S)
     (P : Plog.S with type command = M.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
-    (Rv : Request_votes.S with type address = Ae.address) =
+    (Rv : Request_vote.S with type address = Ae.address) =
 struct
   module Ev = Event.Make (Ae) (Rv) (M)
   module Ac = Action.Make (Ae) (Rv) (M)
@@ -55,13 +55,13 @@ struct
           s.peers
         |> Lwt.return
     | Ac.AppendEntriesResponse (res, mvar) -> Lwt_mvar.put mvar res
-    | Ac.RequestVotesRequest (id, args) ->
+    | Ac.RequestVoteRequest (id, args) ->
         List.iter
           (fun (p : S.peer) ->
             if p.id = id then Lwt.async (fun () -> Rv.send p.address args))
           s.peers
         |> Lwt.return
-    | Ac.RequestVotesResponse (res, mvar) -> Lwt_mvar.put mvar res
+    | Ac.RequestVoteResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.ResetElectionTimeout -> Lwt_mvar.put reset_election_timeout ()
     | Ac.CommandResponse (res, mvar) -> Lwt_mvar.put mvar res
 
@@ -138,7 +138,7 @@ struct
         match rv with
         | None -> Lwt.return_unit
         | Some rv ->
-            push_event (Some (Ev.RequestVotesRequest rv));
+            push_event (Some (Ev.RequestVoteRequest rv));
             loop ()
       in
       loop ()
@@ -151,7 +151,7 @@ struct
         match rv with
         | None -> Lwt.return_unit
         | Some rv ->
-            push_event (Some (Ev.RequestVotesResponse rv));
+            push_event (Some (Ev.RequestVoteResponse rv));
             loop ()
       in
       loop ()

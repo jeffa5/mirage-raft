@@ -6,7 +6,7 @@ module Make
     (M : Machine.S)
     (P : Plog.S with type command = M.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
-    (Rv : Request_votes.S with type address = Ae.address)
+    (Rv : Request_vote.S with type address = Ae.address)
     (Ev : Event.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
@@ -120,9 +120,7 @@ struct
       let rv_args =
         Rv.make_args ~term ~candidate_id:t.id ~last_log_index ~last_log_term
       in
-      List.map
-        (fun (p : peer) -> Ac.RequestVotesRequest (p.id, rv_args))
-        t.peers
+      List.map (fun (p : peer) -> Ac.RequestVoteRequest (p.id, rv_args)) t.peers
     in
     (t, Ac.ResetElectionTimeout :: request_votes)
 
@@ -334,13 +332,13 @@ struct
     if req.term < term then
       let resp = Rv.make_res ~id:t.id ~term ~vote_granted:false in
       Lwt.return
-        (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
+        (t, [ Ac.ResetElectionTimeout; Ac.RequestVoteResponse (resp, mvar) ])
     else
       let* voted_for = P.voted_for t.log in
       let disallow_vote t =
         let resp = Rv.make_res ~id:t.id ~term ~vote_granted:false in
         Lwt.return
-          (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
+          (t, [ Ac.ResetElectionTimeout; Ac.RequestVoteResponse (resp, mvar) ])
       in
       let allow_vote t =
         let+ t =
@@ -348,7 +346,7 @@ struct
           { t with log }
         in
         let resp = Rv.make_res ~id:t.id ~term ~vote_granted:true in
-        (t, [ Ac.ResetElectionTimeout; Ac.RequestVotesResponse (resp, mvar) ])
+        (t, [ Ac.ResetElectionTimeout; Ac.RequestVoteResponse (resp, mvar) ])
       in
       let vote () =
         let* log_at_least_as_up_to_date =
@@ -402,7 +400,7 @@ struct
     | Ev.SendHeartbeat -> handle_send_heartbeat t
     | Ev.AppendEntriesRequest req -> handle_append_entries_request t req
     | Ev.AppendEntriesResponse res -> handle_append_entries_response t res
-    | Ev.RequestVotesRequest req -> handle_request_votes_request t req
-    | Ev.RequestVotesResponse res -> handle_request_votes_response t res
+    | Ev.RequestVoteRequest req -> handle_request_votes_request t req
+    | Ev.RequestVoteResponse res -> handle_request_votes_response t res
     | Ev.CommandReceived com -> handle_command t com
 end

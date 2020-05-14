@@ -171,10 +171,10 @@ let new_actions ((i, e) : int * Ev.t) servers =
                     | Ev.AppendEntriesRequest (args, _) -> args
                     | _ -> assert false ),
                     res ) )
-        | Ac.RequestVotesRequest (i, args) ->
-            Some (i, Ev.RequestVotesRequest (args, Lwt_mvar.create_empty ()))
-        | Ac.RequestVotesResponse (res, _) ->
-            Some (res.id, Ev.RequestVotesResponse res)
+        | Ac.RequestVoteRequest (i, args) ->
+            Some (i, Ev.RequestVoteRequest (args, Lwt_mvar.create_empty ()))
+        | Ac.RequestVoteResponse (res, _) ->
+            Some (res.id, Ev.RequestVoteResponse res)
         | Ac.CommandResponse _ -> None)
       actions
   in
@@ -205,10 +205,10 @@ let actions_to_rpcs e l =
                   | Ev.AppendEntriesRequest (args, _) -> args
                   | _ -> assert false ),
                   res ) )
-      | Ac.RequestVotesRequest (i, args) ->
-          Some (i, Ev.RequestVotesRequest (args, Lwt_mvar.create_empty ()))
-      | Ac.RequestVotesResponse (res, _) ->
-          Some (res.id, Ev.RequestVotesResponse res)
+      | Ac.RequestVoteRequest (i, args) ->
+          Some (i, Ev.RequestVoteRequest (args, Lwt_mvar.create_empty ()))
+      | Ac.RequestVoteResponse (res, _) ->
+          Some (res.id, Ev.RequestVoteResponse res)
       | Ac.CommandResponse _ -> None
       | Ac.ResetElectionTimeout -> None)
     l

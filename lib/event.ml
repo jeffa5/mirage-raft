@@ -14,14 +14,14 @@ module type S = sig
     | SendHeartbeat
     | AppendEntriesRequest of (ae_args * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of (ae_args * ae_res)
-    | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
-    | RequestVotesResponse of rv_res
+    | RequestVoteRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
+    | RequestVoteResponse of rv_res
     | CommandReceived of
         (command_input * (command_input option Lwt_mvar.t[@opaque]))
   [@@deriving sexp]
 end
 
-module Make (Ae : Append_entries.S) (Rv : Request_votes.S) (M : Machine.S) :
+module Make (Ae : Append_entries.S) (Rv : Request_vote.S) (M : Machine.S) :
   S
     with type ae_args = Ae.args
      and type ae_res = Ae.res
@@ -43,8 +43,8 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) (M : Machine.S) :
     | SendHeartbeat
     | AppendEntriesRequest of (ae_args * (ae_res Lwt_mvar.t[@opaque]))
     | AppendEntriesResponse of (ae_args * ae_res)
-    | RequestVotesRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
-    | RequestVotesResponse of rv_res
+    | RequestVoteRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
+    | RequestVoteResponse of rv_res
     | CommandReceived of
         (command_input * (command_input option Lwt_mvar.t[@opaque]))
   [@@deriving sexp]

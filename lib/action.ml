@@ -14,15 +14,15 @@ module type S = sig
   type t =
     | AppendEntriesRequest of int * ae_args
     | AppendEntriesResponse of (ae_res * (ae_res Lwt_mvar.t[@opaque]))
-    | RequestVotesRequest of int * rv_arg
-    | RequestVotesResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
+    | RequestVoteRequest of int * rv_arg
+    | RequestVoteResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
     | ResetElectionTimeout
     | CommandResponse of
         (command_input option * (command_input option Lwt_mvar.t[@opaque]))
   [@@deriving sexp]
 end
 
-module Make (Ae : Append_entries.S) (Rv : Request_votes.S) (M : Machine.S) :
+module Make (Ae : Append_entries.S) (Rv : Request_vote.S) (M : Machine.S) :
   S
     with type ae_args = Ae.args
      and type ae_res = Ae.res
@@ -42,8 +42,8 @@ module Make (Ae : Append_entries.S) (Rv : Request_votes.S) (M : Machine.S) :
   type t =
     | AppendEntriesRequest of int * ae_args
     | AppendEntriesResponse of (ae_res * (ae_res Lwt_mvar.t[@opaque]))
-    | RequestVotesRequest of int * rv_arg
-    | RequestVotesResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
+    | RequestVoteRequest of int * rv_arg
+    | RequestVoteResponse of (rv_res * (rv_res Lwt_mvar.t[@opaque]))
     | ResetElectionTimeout
     | CommandResponse of
         (command_input option * (command_input option Lwt_mvar.t[@opaque]))
