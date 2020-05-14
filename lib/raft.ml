@@ -4,7 +4,7 @@ module Make
     (Time : Mirage_time.S)
     (Random : Mirage_random.S)
     (M : Machine.S)
-    (P : Plog.S with type command = M.input)
+    (P : Plog.S with type command := M.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_vote.S with type address = Ae.address) =
 struct

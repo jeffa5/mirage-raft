@@ -4,9 +4,9 @@ open Asetmap
 
 module Make
     (M : Machine.S)
-    (P : Plog.S with type command = M.input)
-    (Ae : Append_entries.S with type plog_entry = P.entry)
-    (Rv : Request_vote.S with type address = Ae.address)
+    (P : Plog.S with type command := M.input)
+    (Ae : Append_entries.S with type plog_entry := P.entry)
+    (Rv : Request_vote.S with type address := Ae.address)
     (Ev : Event.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
@@ -211,7 +211,7 @@ struct
       let add_entries () =
         let* t, _ =
           Lwt_list.fold_left_s
-            (fun (t, i) (entry : Ae.plog_entry) ->
+            (fun (t, i) (entry : P.entry) ->
               let* e = P.get i t.log in
               match e with
               | None -> Lwt.return (t, i + 1)
