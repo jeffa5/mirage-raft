@@ -20,7 +20,7 @@ struct
     ae_responses : (Ae.args * Ae.res) Lwt_stream.t;
     rv_requests : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
     rv_responses : Rv.res Lwt_stream.t;
-    commands : (M.input * M.output option Lwt_mvar.t) Lwt_stream.t;
+    commands : (M.input * M.input option Lwt_mvar.t) Lwt_stream.t;
   }
 
   (** timeout is the lower and upper bounds for the election timeout, [lower,upper), in ms
@@ -29,11 +29,10 @@ struct
       ae_requests ae_responses rv_requests rv_responses commands id peers =
     let+ state =
       let+ log = P.v () in
-      let machine = M.v () in
       let peers =
         List.map (fun (id, address) -> S.make_peer ~id ~address ()) peers
       in
-      S.make ~id ~peers ~log ~machine ()
+      S.make ~id ~peers ~log ()
     in
     {
       state;

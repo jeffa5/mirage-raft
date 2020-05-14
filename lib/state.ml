@@ -12,28 +12,27 @@ module Make
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command_input := M.input
-             and type command_output := M.output)
+             and type command_input := M.input)
     (Ac : Action.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command_output := M.output) =
+             and type command_input := M.input) =
 struct
   module CommandMap = struct
     module Mp = Map.Make (Int)
     include Mp
 
-    type t = M.output option Lwt_mvar.t Mp.t
+    type t = M.input option Lwt_mvar.t Mp.t
 
     let t_of_sexp s =
-      [%of_sexp: (int * (M.output option Lwt_mvar.t[@opaque])) list] s
+      [%of_sexp: (int * (M.input option Lwt_mvar.t[@opaque])) list] s
       |> Mp.of_list
 
     let sexp_of_t t =
       Mp.to_list t
-      |> [%sexp_of: (int * (M.output option Lwt_mvar.t[@opaque])) list]
+      |> [%sexp_of: (int * (M.input option Lwt_mvar.t[@opaque])) list]
   end
 
   type stage = Leader | Candidate | Follower [@@deriving sexp]
@@ -54,7 +53,6 @@ struct
     commit_index : int; [@default 0]
     last_applied : int; [@default 0]
     votes_received : int; [@default 0]
-    machine : M.t; [@default M.v ()]
     replicating : CommandMap.t; [@default CommandMap.empty]
   }
   [@@deriving make, sexp]
@@ -174,9 +172,7 @@ struct
             match command_mvar with
             | None -> (t, actions)
             | Some mvar ->
-                let machine, output = M.apply e.command t.machine in
-                ( { t with machine },
-                  Ac.CommandResponse (Some output, mvar) :: actions ))
+                (t, Ac.CommandResponse (Some e.command, mvar) :: actions))
           (t, []) entries
     else Lwt.return (t, [])
 
@@ -201,14 +197,13 @@ struct
         match entry with
         | None -> ({ t with last_applied }, [])
         | Some entry ->
-            let machine, output = M.apply entry.command t.machine in
             let mvar = CommandMap.find last_applied t.replicating in
             let actions =
               match mvar with
               | None -> []
-              | Some mvar -> [ Ac.CommandResponse (Some output, mvar) ]
+              | Some mvar -> [ Ac.CommandResponse (Some entry.command, mvar) ]
             in
-            ({ t with last_applied; machine }, actions)
+            ({ t with last_applied }, actions)
       else Lwt.return (t, [])
     in
     let* t, actions =
@@ -403,7 +398,7 @@ struct
       else Lwt.return (t, [])
 
   let handle_command (t : t)
-      ((command, mvar) : M.input * M.output option Lwt_mvar.t) =
+      ((command, mvar) : M.input * M.input option Lwt_mvar.t) =
     match t.stage with
     | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
     | Leader ->
