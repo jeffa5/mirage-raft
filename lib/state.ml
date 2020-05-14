@@ -193,32 +193,11 @@ struct
   let handle_append_entries_request (t : t)
       ((req, mvar) : Ae.args * Ae.res Lwt_mvar.t) =
     let* t, actions =
-      if req.leader_commit > t.last_applied then
-        let last_applied = t.last_applied + 1 in
-        let+ entry = P.get t.log t.last_applied in
-        match entry with
-        | None -> ({ t with last_applied }, [])
-        | Some entry ->
-            let mvar = CommandMap.find last_applied t.replicating in
-            let t, actions =
-              match mvar with
-              | None -> (t, [])
-              | Some mvar ->
-                  let replicating =
-                    CommandMap.remove last_applied t.replicating
-                  in
-                  ( { t with replicating },
-                    [ Ac.CommandResponse (Some entry.command, mvar) ] )
-            in
-            ({ t with last_applied }, actions)
-      else Lwt.return (t, [])
-    in
-    let* t, actions =
       let* current_term = P.current_term t.log in
       if req.term > current_term then
         let+ t, a = become_follower t req.term in
-        (t, actions @ a)
-      else Lwt.return (t, actions)
+        (t, a)
+      else Lwt.return (t, [])
     in
     let* term = P.current_term t.log in
     if req.term < term then
