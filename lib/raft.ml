@@ -6,7 +6,7 @@ module Make
     (M : Machine.S)
     (P : Plog.S with type command = M.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
-    (Rv : Request_votes.S) =
+    (Rv : Request_votes.S with type address = Ae.address) =
 struct
   module Ev = Event.Make (Ae) (Rv) (M)
   module Ac = Action.Make (Ae) (Rv) (M)

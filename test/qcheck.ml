@@ -80,6 +80,8 @@ end
 module Ae = struct
   type plog_entry = P.entry [@@deriving sexp]
 
+  type address = Uri_sexp.t [@@deriving sexp]
+
   type args = {
     term : int;
     leader_id : int;
@@ -96,6 +98,8 @@ module Ae = struct
 end
 
 module Rv = struct
+  type address = Uri_sexp.t [@@deriving sexp]
+
   type args = {
     term : int;
     candidate_id : int;

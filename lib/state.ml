@@ -6,7 +6,7 @@ module Make
     (M : Machine.S)
     (P : Plog.S with type command = M.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
-    (Rv : Request_votes.S)
+    (Rv : Request_votes.S with type address = Ae.address)
     (Ev : Event.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
@@ -39,7 +39,7 @@ struct
 
   type peer = {
     id : int;
-    address : Uri_sexp.t;
+    address : Ae.address;
     next_index : int; [@default 0]
     match_index : int; [@default 0]
   }

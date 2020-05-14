@@ -1,6 +1,8 @@
 module type S = sig
   type plog_entry [@@deriving sexp]
 
+  type address [@@deriving sexp]
+
   type args = {
     term : int;
     leader_id : int;
@@ -13,7 +15,7 @@ module type S = sig
 
   type res = { id : int; term : int; success : bool } [@@deriving make, sexp]
 
-  val send : Uri_sexp.t -> args -> unit Lwt.t
+  val send : address -> args -> unit Lwt.t
   (** [append_entries] is invoked by leader to replicate log entries; also used as heartbeat.
  *
  *  Arguments
