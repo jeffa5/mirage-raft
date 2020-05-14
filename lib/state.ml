@@ -133,6 +133,8 @@ struct
     let+ log = P.set_voted_for log None in
     ({ t with log; stage = Follower }, [ Ac.ResetElectionTimeout ])
 
+  let majority t c = 2 * c > List.length t.peers + 1
+
   let apply_entries_to_machine t =
     let* current_term = P.current_term t.log in
     let* entries_since_commit_index = P.get_from t.log (t.commit_index + 1) in
@@ -147,7 +149,7 @@ struct
                   if peer.match_index >= i then count + 1 else count)
                 1 t.peers
             in
-            if match_count * 2 > List.length t.peers + 1 then i else ci
+            if majority t match_count then i else ci
           else ci)
         t.commit_index
         (List.mapi
@@ -394,7 +396,7 @@ struct
       let votes = t.votes_received in
       if res.term = current_term && res.vote_granted then
         let vote_count = votes + 1 in
-        if 2 * vote_count > List.length t.peers + 1 then become_leader t
+        if majority t vote_count then become_leader t
         else
           let t = { t with votes_received = vote_count } in
           Lwt.return (t, [])
