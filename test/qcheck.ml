@@ -36,21 +36,21 @@ module P = struct
 
   let voted_for t = Lwt.return t.voted_for
 
-  let set_current_term t c = Lwt.return { t with current_term = c }
+  let set_current_term c t = Lwt.return { t with current_term = c }
 
-  let set_voted_for t v = Lwt.return { t with voted_for = v }
+  let set_voted_for v t = Lwt.return { t with voted_for = v }
 
-  let insert t i e =
+  let insert i e t =
     let t = { t with items = (i, e) :: t.items } in
     Lwt.return t
 
-  let get t i =
+  let get i t =
     List.fold_left
       (fun acc (index, e) -> if i = index then Some e else acc)
       None t.items
     |> Lwt.return
 
-  let delete_from t i =
+  let delete_from i t =
     let items =
       List.filter_map
         (fun (index, e) -> if index >= i then None else Some (index, e))
@@ -58,7 +58,7 @@ module P = struct
     in
     Lwt.return { t with items }
 
-  let get_from t i =
+  let get_from i t =
     List.filter_map
       (fun (index, e) -> if index >= i then Some e else None)
       t.items

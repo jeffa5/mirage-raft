@@ -16,23 +16,23 @@ module type S = sig
   val voted_for : t -> int option Lwt.t
   (** [voted_for t] returns the voted for option from the persistent log *)
 
-  val set_current_term : t -> int -> t Lwt.t
-  (** [set_current_term t c] updates the log with [c] and persists the change before returning *)
+  val set_current_term : int -> t -> t Lwt.t
+  (** [set_current_term c t] updates the log with [c] and persists the change before returning *)
 
-  val set_voted_for : t -> int option -> t Lwt.t
-  (** [set_voted_for t v] updates the log with [v] and persists the change before returning *)
+  val set_voted_for : int option -> t -> t Lwt.t
+  (** [set_voted_for v t] updates the log with [v] and persists the change before returning *)
 
-  val insert : t -> int -> entry -> t Lwt.t
-  (** [insert t i e] inserts entry [e] into [t] at index [i] *)
+  val insert : int -> entry -> t -> t Lwt.t
+  (** [insert i e t] inserts entry [e] into [t] at index [i] *)
 
-  val get : t -> int -> entry option Lwt.t
-  (** [get t i] gets the (maybe missing) entry at index [i] *)
+  val get : int -> t -> entry option Lwt.t
+  (** [get i t] gets the (maybe missing) entry at index [i] *)
 
-  val delete_from : t -> int -> t Lwt.t
-  (** [delete_from t i] deletes all entries starting from index [i] inclusive *)
+  val delete_from : int -> t -> t Lwt.t
+  (** [delete_from i t] deletes all entries starting from index [i] inclusive *)
 
-  val get_from : t -> int -> entry list Lwt.t
-  (** [get_from t i] returns the list of entries from index [i] inclusive *)
+  val get_from : int -> t -> entry list Lwt.t
+  (** [get_from i t] returns the list of entries from index [i] inclusive *)
 
   val last_entry : t -> (int * int) option Lwt.t
   (** [last_entry t] returns the index and entry for the last log entry, if an entry exists *)

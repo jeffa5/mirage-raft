@@ -74,11 +74,11 @@ struct
               let* last_log_index, _ = get_last_entry t.log in
               let prev_log_index = peer.next_index - 1 in
               let* prev_log_term =
-                let+ prev_entry = P.get t.log prev_log_index in
+                let+ prev_entry = P.get prev_log_index t.log in
                 match prev_entry with None -> -1 | Some e -> e.term
               in
               if last_log_index >= peer.next_index then
-                let+ entries = P.get_from t.log peer.next_index in
+                let+ entries = P.get_from peer.next_index t.log in
                 let args =
                   Ae.make_args ~term ~leader_id ~prev_log_index ~prev_log_term
                     ~entries ~leader_commit ()
@@ -96,7 +96,7 @@ struct
         (t, actions)
 
   let become_leader (t : t) =
-    let* log = P.set_voted_for t.log None in
+    let* log = P.set_voted_for None t.log in
     let* peers =
       let+ last_log_index, _ = get_last_entry t.log in
       List.map
@@ -110,9 +110,9 @@ struct
     (* increment current_term *)
     let* term = P.current_term t.log in
     let term = term + 1 in
-    let* log = P.set_current_term t.log term in
+    let* log = P.set_current_term term t.log in
     (* vote for self *)
-    let* log = P.set_voted_for log (Some t.id) in
+    let* log = P.set_voted_for (Some t.id) log in
     let t = { t with log; stage = Candidate; votes_received = 1 } in
     (* send request_vote rpcs to all other servers *)
     let+ request_votes =
@@ -125,15 +125,15 @@ struct
     (t, Ac.ResetElectionTimeout :: request_votes)
 
   let become_follower (t : t) term =
-    let* log = P.set_current_term t.log term in
-    let+ log = P.set_voted_for log None in
+    let* log = P.set_current_term term t.log in
+    let+ log = P.set_voted_for None log in
     ({ t with log; stage = Follower }, [ Ac.ResetElectionTimeout ])
 
   let majority t c = 2 * c > List.length t.peers + 1
 
   let apply_entries_to_machine t =
     let* current_term = P.current_term t.log in
-    let* entries_since_commit_index = P.get_from t.log (t.commit_index + 1) in
+    let* entries_since_commit_index = P.get_from (t.commit_index + 1) t.log in
     (* if there exists an N s.t. N > commit_index, a majority of match_index[i] >= N, and log[N].term == current_term  set commit_index = N *)
     let commit_index =
       List.fold_left
@@ -160,7 +160,7 @@ struct
           List.init (t.commit_index - t.last_applied) (fun i ->
               i + t.last_applied + 1)
           |> Lwt_list.filter_map_s (fun i ->
-                 let+ entry = P.get t.log i in
+                 let+ entry = P.get i t.log in
                  match entry with None -> None | Some e -> Some (i, e))
         in
         let t = { t with last_applied = t.commit_index } in
@@ -184,7 +184,7 @@ struct
         match t.peers with
         | [] ->
             let* current_term = P.current_term t.log in
-            let* log = P.set_current_term t.log (current_term + 1) in
+            let* log = P.set_current_term (current_term + 1) t.log in
             become_leader { t with log }
         | _ -> become_candidate t )
 
@@ -212,14 +212,14 @@ struct
         let* t, _ =
           Lwt_list.fold_left_s
             (fun (t, i) (entry : Ae.plog_entry) ->
-              let* e = P.get t.log i in
+              let* e = P.get i t.log in
               match e with
               | None -> Lwt.return (t, i + 1)
               | Some e ->
                   (* if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it *)
                   if e.term = entry.term then Lwt.return (t, i + 1)
                   else
-                    let+ log = P.delete_from t.log i in
+                    let+ log = P.delete_from i t.log in
                     ({ t with log }, i + 1))
             (t, req.prev_log_index + 1)
             req.entries
@@ -228,7 +228,7 @@ struct
           Lwt_list.fold_left_s
             (fun (t, i) entry ->
               (* append any new entries not already in the log *)
-              let+ log = P.insert t.log i entry in
+              let+ log = P.insert i entry t.log in
               ({ t with log }, i + 1))
             (t, req.prev_log_index + 1)
             req.entries
@@ -259,7 +259,7 @@ struct
                   Ac.AppendEntriesResponse (response, mvar);
                 ] )
       in
-      let* prev_log_index_entry = P.get t.log req.prev_log_index in
+      let* prev_log_index_entry = P.get req.prev_log_index t.log in
       (* reply false if log doesn't contain an entry at prev_log_index whose term matches prev_log_term *)
       match prev_log_index_entry with
       | None -> add_entries ()
@@ -298,9 +298,9 @@ struct
                     (* decrement next_index and retry *)
                     let next_index = max 0 (p.next_index - 1) in
                     let p = { p with next_index } in
-                    let* entries = P.get_from t.log next_index in
+                    let* entries = P.get_from next_index t.log in
                     let prev_log_index = max 0 (next_index - 1) in
-                    let+ prev_entry = P.get t.log prev_log_index in
+                    let+ prev_entry = P.get prev_log_index t.log in
                     let prev_log_term =
                       match prev_entry with None -> -1 | Some e -> e.term
                     in
@@ -342,7 +342,7 @@ struct
       in
       let allow_vote t =
         let+ t =
-          let+ log = P.set_voted_for t.log (Some req.candidate_id) in
+          let+ log = P.set_voted_for (Some req.candidate_id) t.log in
           { t with log }
         in
         let resp = Rv.make_res ~id:t.id ~term ~vote_granted:true in
@@ -389,7 +389,7 @@ struct
         let* term = P.current_term t.log in
         let* last_log_index, _ = get_last_entry t.log in
         let new_index = last_log_index + 1 in
-        let* log = P.insert t.log new_index (P.make_entry ~term ~command) in
+        let* log = P.insert new_index (P.make_entry ~term ~command) t.log in
         let replicating = CommandMap.add new_index mvar t.replicating in
         let t = { t with replicating; log } in
         handle_send_heartbeat t
