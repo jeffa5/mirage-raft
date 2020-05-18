@@ -223,10 +223,7 @@ let states =
            let server id p1id p2id =
              let+ log = P.v () in
              let peers =
-               [
-                 State.make_peer ~id:p1id ~address:Uri.empty ();
-                 State.make_peer ~id:p2id ~address:Uri.empty ();
-               ]
+               [ State.make_peer ~id:p1id (); State.make_peer ~id:p2id () ]
              in
              State.make ~id ~peers ~log ()
            in
@@ -375,10 +372,7 @@ let leader_append_only =
           let server id p1id p2id =
             let+ log = P.v () in
             let peers =
-              [
-                State.make_peer ~id:p1id ~address:Uri.empty ();
-                State.make_peer ~id:p2id ~address:Uri.empty ();
-              ]
+              [ State.make_peer ~id:p1id (); State.make_peer ~id:p2id () ]
             in
             State.make ~id ~peers ~log ()
           in
@@ -432,10 +426,7 @@ let leader_completeness =
           let server id p1id p2id =
             let+ log = P.v () in
             let peers =
-              [
-                State.make_peer ~id:p1id ~address:Uri.empty ();
-                State.make_peer ~id:p2id ~address:Uri.empty ();
-              ]
+              [ State.make_peer ~id:p1id (); State.make_peer ~id:p2id () ]
             in
             State.make ~id ~peers ~log ()
           in

@@ -16,6 +16,7 @@ struct
     state : S.t;
     timeout : int * int;
     heartbeat : int;
+    peers : (int * Ae.address) list;
     ae_requests : (Ae.args * Ae.res Lwt_mvar.t) Lwt_stream.t;
     ae_responses : (Ae.args * Ae.res) Lwt_stream.t;
     rv_requests : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
@@ -29,15 +30,14 @@ struct
       ae_requests ae_responses rv_requests rv_responses commands id peers =
     let+ state =
       let+ log = P.v () in
-      let peers =
-        List.map (fun (id, address) -> S.make_peer ~id ~address ()) peers
-      in
+      let peers = List.map (fun (id, _) -> S.make_peer ~id ()) peers in
       S.make ~id ~peers ~log ()
     in
     {
       state;
       timeout = (timeout_lower, timeout_upper);
       heartbeat;
+      peers;
       ae_requests;
       ae_responses;
       rv_requests;
@@ -47,19 +47,19 @@ struct
 
   let reset_election_timeout = Lwt_mvar.create_empty ()
 
-  let handle_action (s : S.t) = function
+  let handle_action (t : t) = function
     | Ac.AppendEntriesRequest (id, args) ->
         List.iter
-          (fun (p : S.peer) ->
-            if p.id = id then Lwt.async (fun () -> Ae.send p.address args))
-          s.peers
+          (fun (i, addr) ->
+            if i = id then Lwt.async (fun () -> Ae.send addr args))
+          t.peers
         |> Lwt.return
     | Ac.AppendEntriesResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.RequestVoteRequest (id, args) ->
         List.iter
-          (fun (p : S.peer) ->
-            if p.id = id then Lwt.async (fun () -> Rv.send p.address args))
-          s.peers
+          (fun (i, addr) ->
+            if i = id then Lwt.async (fun () -> Rv.send addr args))
+          t.peers
         |> Lwt.return
     | Ac.RequestVoteResponse (res, mvar) -> Lwt_mvar.put mvar res
     | Ac.ResetElectionTimeout -> Lwt_mvar.put reset_election_timeout ()
@@ -224,7 +224,7 @@ struct
                           Logs.Tag.(
                             empty |> add action_tag a |> add state_tag s'))
                 in
-                handle_action s a)
+                handle_action t a)
               actions
           in
           loop s s'

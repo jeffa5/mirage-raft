@@ -6,7 +6,7 @@ module Make
     (M : Machine.S)
     (P : Plog.S with type command := M.input)
     (Ae : Append_entries.S with type plog_entry := P.entry)
-    (Rv : Request_vote.S with type address := Ae.address)
+    (Rv : Request_vote.S)
     (Ev : Event.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
@@ -39,7 +39,6 @@ struct
 
   type peer = {
     id : int;  (** id of the peer *)
-    address : Ae.address;  (** address of the peer *)
     voting : bool; [@default true]
         (** whether the peer is ready to vote, used during cluster membership changes *)
     next_index : int; [@default 0]
