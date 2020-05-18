@@ -325,7 +325,6 @@ let election_safety =
       states (fun states ->
         let module TermMap = Map.Make (Int) in
         let leaders = TermMap.empty in
-
         let check_leader (s : State.t) leaders =
           match s.stage with
           | State.Leader -> (
@@ -336,7 +335,6 @@ let election_safety =
               | Some _ -> (leaders, false) )
           | _ -> Lwt.return (leaders, true)
         in
-
         let lwt =
           let* states = states in
           let+ _, ok =
@@ -415,5 +413,63 @@ let leader_append_only =
         in
         Lwt_main.run lwt))
 
+let leader_completeness =
+  QCheck.(
+    Test.make ~count:10_000
+      ~name:
+        "Leader completeness: if a log entry is committed in a given term, \
+         then that entry will be present in the logs of the leaders for all \
+         higher-numbered terms"
+      states (fun states ->
+        let lwt =
+          let rec compare_logs (o : P.item list) (n : P.item list) =
+            match (o, n) with
+            | [], [] -> true
+            | [], _ -> true
+            | _, [] -> false
+            | x :: xs, y :: ys -> if x = y then compare_logs xs ys else false
+          in
+          let server id p1id p2id =
+            let+ log = P.v () in
+            let peers =
+              [
+                State.make_peer ~id:p1id ~address:Uri.empty ();
+                State.make_peer ~id:p2id ~address:Uri.empty ();
+              ]
+            in
+            State.make ~id ~peers ~log ()
+          in
+          let* servers =
+            [ server 0 1 2; server 1 0 2; server 2 0 1 ]
+            |> Lwt_list.map_s (fun i -> i)
+          in
+          let* states = states in
+          let+ _, ok =
+            Lwt_list.fold_left_s
+              (fun (old_servers, ok) state ->
+                let _, servers = state in
+                let+ new_servers, ok =
+                  Lwt_list.fold_left_s
+                    (fun (new_servers, ok) ((o, s) : State.t * State.t) ->
+                      if ok then
+                        match s.stage with
+                        | Leader ->
+                            let ok =
+                              compare_logs (List.rev o.log.items)
+                                (List.rev s.log.items)
+                            in
+                            Lwt.return (s :: new_servers, ok)
+                        | _ -> Lwt.return (s :: new_servers, ok)
+                      else Lwt.return (s :: new_servers, false))
+                    ([], ok) (zip old_servers servers)
+                in
+                (List.rev new_servers, ok))
+              (servers, true) states
+          in
+          ok
+        in
+        Lwt_main.run lwt))
+
 let tests =
-  List.map QCheck_alcotest.to_alcotest [ election_safety; leader_append_only ]
+  List.map QCheck_alcotest.to_alcotest
+    [ election_safety; leader_append_only; leader_completeness ]
