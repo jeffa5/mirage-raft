@@ -1,3 +1,5 @@
+open Sexplib0.Sexp_conv
+
 module type S = sig
   type ae_args [@@deriving sexp]
 
@@ -18,6 +20,7 @@ module type S = sig
     | RequestVoteResponse of rv_res
     | CommandReceived of
         (command_input * (command_input option Lwt_mvar.t[@opaque]))
+    | AddPeer of int
   [@@deriving sexp]
 end
 
@@ -47,5 +50,6 @@ module Make (Ae : Append_entries.S) (Rv : Request_vote.S) (M : Machine.S) :
     | RequestVoteResponse of rv_res
     | CommandReceived of
         (command_input * (command_input option Lwt_mvar.t[@opaque]))
+    | AddPeer of int
   [@@deriving sexp]
 end

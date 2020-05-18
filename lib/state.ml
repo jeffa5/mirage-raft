@@ -399,6 +399,10 @@ struct
         let t = { t with replicating; log } in
         handle_send_heartbeat t
 
+  let handle_add_peer (t : t) id =
+    let _peer = make_peer ~id ~voting:false in
+    Lwt.return (t, [])
+
   let handle t event =
     match event with
     | Ev.ElectionTimeout -> handle_timeout t
@@ -408,4 +412,5 @@ struct
     | Ev.RequestVoteRequest req -> handle_request_votes_request t req
     | Ev.RequestVoteResponse res -> handle_request_votes_response t res
     | Ev.CommandReceived com -> handle_command t com
+    | Ev.AddPeer id -> handle_add_peer t id
 end
