@@ -321,7 +321,7 @@ let states =
 
 let election_safety =
   QCheck.(
-    Test.make ~count:10_000 ~name:"Election safety: at most one leader per term"
+    Test.make ~count:1_000 ~name:"Election safety: at most one leader per term"
       states (fun states ->
         let module TermMap = Map.Make (Int) in
         let leaders = TermMap.empty in
@@ -359,7 +359,7 @@ let election_safety =
 
 let leader_append_only =
   QCheck.(
-    Test.make ~count:10_000
+    Test.make ~count:1_000
       ~name:
         "Leader append-only: a leader never overwrites or deletes entries in \
          its log; it only appends new entries"
@@ -415,7 +415,7 @@ let leader_append_only =
 
 let leader_completeness =
   QCheck.(
-    Test.make ~count:10_000
+    Test.make ~count:1_000
       ~name:
         "Leader completeness: if a log entry is committed in a given term, \
          then that entry will be present in the logs of the leaders for all \
