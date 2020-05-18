@@ -17,3 +17,7 @@ format:
 .PHONY: test
 test:
 	dune exec test/main.exe
+
+.PHONY: doc
+doc:
+	dune build @doc
