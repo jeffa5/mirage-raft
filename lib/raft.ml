@@ -22,12 +22,14 @@ struct
     rv_requests : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
     rv_responses : Rv.res Lwt_stream.t;
     commands : (M.input * M.input option Lwt_mvar.t) Lwt_stream.t;
+    add_peers : int Lwt_stream.t;
   }
 
   (** timeout is the lower and upper bounds for the election timeout, [lower,upper), in ms
    *  heartbeat is the duration on which to repeat the heartbeat, in ms *)
   let v ?(timeout_lower = 150) ?(timeout_upper = 301) ?(heartbeat = 50)
-      ae_requests ae_responses rv_requests rv_responses commands id peers =
+      ae_requests ae_responses rv_requests rv_responses commands add_peers id
+      peers =
     let+ state =
       let+ log = P.v () in
       let peers = List.map (fun (id, _) -> S.make_peer ~id ()) peers in
@@ -43,6 +45,7 @@ struct
       rv_requests;
       rv_responses;
       commands;
+      add_peers;
     }
 
   let reset_election_timeout = Lwt_mvar.create_empty ()
@@ -181,6 +184,19 @@ struct
       loop ()
     in
     Lwt.async command_inputs;
+
+    let add_peer () =
+      let rec loop () =
+        let* peer = Lwt_stream.get t.add_peers in
+        match peer with
+        | None -> Lwt.return_unit
+        | Some peer ->
+            push_event (Some (Ev.AddPeer peer));
+            loop ()
+      in
+      loop ()
+    in
+    Lwt.async add_peer;
 
     let state_tag =
       Logs.Tag.def "state" ~doc:"Current state" (fun f s ->
