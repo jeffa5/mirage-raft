@@ -38,8 +38,10 @@ struct
   type stage = Leader | Candidate | Follower [@@deriving sexp]
 
   type peer = {
-    id : int;
-    address : Ae.address;
+    id : int;  (** id of the peer *)
+    address : Ae.address;  (** address of the peer *)
+    voting : bool; [@default true]
+        (** whether the peer is ready to vote, used during cluster membership changes *)
     next_index : int; [@default 0]
     match_index : int; [@default 0]
   }
@@ -129,7 +131,11 @@ struct
     let+ log = P.set_voted_for None log in
     ({ t with log; stage = Follower }, [ Ac.ResetElectionTimeout ])
 
-  let majority t c = 2 * c > List.length t.peers + 1
+  let majority t c =
+    let voting_peers =
+      List.fold_left (fun c p -> if p.voting then c + 1 else c) 0 t.peers
+    in
+    2 * c > voting_peers + 1
 
   let apply_entries_to_machine t =
     let* current_term = P.current_term t.log in
