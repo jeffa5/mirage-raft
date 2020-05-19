@@ -15,13 +15,15 @@ module Make (Server : Cohttp_lwt.S.Server) = struct
   type machine_input = Set of string * string | Get of string
   [@@deriving sexp]
 
-  type t =
+  type input =
     | MachineInput of machine_input
     | AddPeers of int list
     | RemovePeers of int list
   [@@deriving sexp]
 
-  type output = Added | Value of string option [@@deriving sexp]
+  type output = Result of input | NotLeader of int option [@@deriving sexp]
+
+  type machine_output = Added | Value of string option [@@deriving sexp]
 
   let t = ref StringMap.empty
 
@@ -54,10 +56,15 @@ module Make (Server : Cohttp_lwt.S.Server) = struct
             push_command (Some (MachineInput (Get key), mvar));
             let* response = Lwt_mvar.take mvar in
             match response with
-            | None -> Server.respond_not_found ()
-            | Some i ->
+            | NotLeader None -> Server.respond_not_found ()
+            | NotLeader (Some i) ->
+                Server.respond_string ~status:`Not_found ~body:(string_of_int i)
+                  ()
+            | Result i ->
                 let output = apply i in
-                let body = sexp_of_output output |> Sexplib0.Sexp.to_string in
+                let body =
+                  sexp_of_machine_output output |> Sexplib0.Sexp.to_string
+                in
                 Server.respond_string ~status:`OK ~body () ) )
     | "PUT" -> (
         match path with
@@ -72,10 +79,15 @@ module Make (Server : Cohttp_lwt.S.Server) = struct
             push_command (Some (MachineInput (Set (key, body)), mvar));
             let* response = Lwt_mvar.take mvar in
             match response with
-            | None -> Server.respond_not_found ()
-            | Some i ->
+            | NotLeader None -> Server.respond_not_found ()
+            | NotLeader (Some i) ->
+                Server.respond_string ~status:`Not_found ~body:(string_of_int i)
+                  ()
+            | Result i ->
                 let output = apply i in
-                let body = sexp_of_output output |> Sexplib0.Sexp.to_string in
+                let body =
+                  sexp_of_machine_output output |> Sexplib0.Sexp.to_string
+                in
                 Server.respond_string ~status:`OK ~body () ) )
     | _ -> Server.respond_not_found ()
 end
