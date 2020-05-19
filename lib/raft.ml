@@ -3,14 +3,14 @@ open Lwt.Syntax
 module Make
     (Time : Mirage_time.S)
     (Random : Mirage_random.S)
-    (M : Machine.S)
-    (P : Plog.S with type command := M.input)
+    (C : Command.S)
+    (P : Plog.S with type command := C.t)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_vote.S with type address = Ae.address) =
 struct
-  module Ev = Event.Make (Ae) (Rv) (M)
-  module Ac = Action.Make (Ae) (Rv) (M)
-  module S = State.Make (M) (P) (Ae) (Rv) (Ev) (Ac)
+  module Ev = Event.Make (Ae) (Rv) (C)
+  module Ac = Action.Make (Ae) (Rv) (C)
+  module S = State.Make (C) (P) (Ae) (Rv) (Ev) (Ac)
 
   type t = {
     state : S.t;
@@ -21,7 +21,7 @@ struct
     ae_responses : (Ae.args * Ae.res) Lwt_stream.t;
     rv_requests : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
     rv_responses : Rv.res Lwt_stream.t;
-    commands : (M.input * M.input option Lwt_mvar.t) Lwt_stream.t;
+    commands : (C.t * C.t option Lwt_mvar.t) Lwt_stream.t;
     add_peers : int Lwt_stream.t;
   }
 

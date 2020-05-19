@@ -8,20 +8,18 @@ let rec zip xs ys =
   | [], _ -> []
   | x :: xs, y :: ys -> (x, y) :: zip xs ys
 
-module M = struct
-  type t = string [@@deriving sexp]
+module C = struct
+  type machine_input = string [@@deriving sexp]
 
-  type input = string [@@deriving sexp]
-
-  type output = string [@@deriving sexp]
-
-  let v () = ""
-
-  let apply input t = (t ^ input, input)
+  type t =
+    | MachineInput of machine_input
+    | AddPeers of int list
+    | RemovePeers of int list
+  [@@deriving sexp]
 end
 
 module P = struct
-  type command = M.input [@@deriving sexp]
+  type command = C.t [@@deriving sexp]
 
   type entry = { term : int; command : command } [@@deriving make, sexp]
 
@@ -114,9 +112,9 @@ module Rv = struct
   let send _uri _args = Lwt.return_unit
 end
 
-module Ev = Mirage_raft.Event.Make (Ae) (Rv) (M)
-module Ac = Mirage_raft.Action.Make (Ae) (Rv) (M)
-module State = Mirage_raft.State.Make (M) (P) (Ae) (Rv) (Ev) (Ac)
+module Ev = Mirage_raft.Event.Make (Ae) (Rv) (C)
+module Ac = Mirage_raft.Action.Make (Ae) (Rv) (C)
+module State = Mirage_raft.State.Make (C) (P) (Ae) (Rv) (Ev) (Ac)
 
 type input =
   | Event of int * Ev.t
@@ -124,6 +122,15 @@ type input =
   | DropRpc of int
   | RestartServer of int
 [@@deriving sexp]
+
+let command =
+  QCheck.(
+    oneof
+      [
+        small_string |> map (fun s -> C.MachineInput s);
+        list int |> map (fun p -> C.AddPeers p);
+        list int |> map (fun p -> C.RemovePeers p);
+      ])
 
 let input =
   QCheck.(
@@ -134,7 +141,7 @@ let input =
              [
                always Ev.ElectionTimeout;
                always Ev.SendHeartbeat;
-               small_string
+               command
                |> map (fun i ->
                       Ev.CommandReceived (i, Lwt_mvar.create_empty ()));
              ])

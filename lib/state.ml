@@ -3,8 +3,8 @@ open Lwt.Syntax
 open Asetmap
 
 module Make
-    (M : Machine.S)
-    (P : Plog.S with type command := M.input)
+    (C : Command.S)
+    (P : Plog.S with type command := C.t)
     (Ae : Append_entries.S with type plog_entry := P.entry)
     (Rv : Request_vote.S)
     (Ev : Event.S
@@ -12,19 +12,19 @@ module Make
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command_input := M.input)
+             and type command_input := C.t)
     (Ac : Action.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command_input := M.input) =
+             and type command_input := C.t) =
 struct
   module CommandMap = struct
     module Mp = Map.Make (Int)
     include Mp
 
-    type t = M.input option Lwt_mvar.t Mp.t
+    type t = C.t option Lwt_mvar.t Mp.t
 
     let t_of_sexp s =
       [%of_sexp: (int * (M.input option Lwt_mvar.t[@opaque])) list] s
@@ -386,8 +386,7 @@ struct
           Lwt.return (t, [])
       else Lwt.return (t, [])
 
-  let handle_command (t : t)
-      ((command, mvar) : M.input * M.input option Lwt_mvar.t) =
+  let handle_command (t : t) ((command, mvar) : C.t * C.t option Lwt_mvar.t) =
     match t.stage with
     | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
     | Leader ->
