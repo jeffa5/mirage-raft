@@ -9,7 +9,7 @@ module type S = sig
 
   type rv_res [@@deriving sexp]
 
-  type command_input [@@deriving sexp]
+  type command [@@deriving sexp]
 
   type t =
     | ElectionTimeout
@@ -18,8 +18,7 @@ module type S = sig
     | AppendEntriesResponse of (ae_args * ae_res)
     | RequestVoteRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVoteResponse of rv_res
-    | CommandReceived of
-        (command_input * (command_input option Lwt_mvar.t[@opaque]))
+    | CommandReceived of (command * (command option Lwt_mvar.t[@opaque]))
     | AddPeer of int
   [@@deriving sexp]
 end
@@ -30,7 +29,7 @@ module Make (Ae : Append_entries.S) (Rv : Request_vote.S) (C : Command.S) :
      and type ae_res = Ae.res
      and type rv_arg = Rv.args
      and type rv_res = Rv.res
-     and type command_input = C.t = struct
+     and type command = C.t = struct
   type ae_args = Ae.args [@@deriving sexp]
 
   type ae_res = Ae.res [@@deriving sexp]
@@ -39,7 +38,7 @@ module Make (Ae : Append_entries.S) (Rv : Request_vote.S) (C : Command.S) :
 
   type rv_res = Rv.res [@@deriving sexp]
 
-  type command_input = C.t [@@deriving sexp]
+  type command = C.t [@@deriving sexp]
 
   type t =
     | ElectionTimeout
@@ -48,8 +47,7 @@ module Make (Ae : Append_entries.S) (Rv : Request_vote.S) (C : Command.S) :
     | AppendEntriesResponse of (ae_args * ae_res)
     | RequestVoteRequest of (rv_arg * (rv_res Lwt_mvar.t[@opaque]))
     | RequestVoteResponse of rv_res
-    | CommandReceived of
-        (command_input * (command_input option Lwt_mvar.t[@opaque]))
+    | CommandReceived of (command * (command option Lwt_mvar.t[@opaque]))
     | AddPeer of int
   [@@deriving sexp]
 end

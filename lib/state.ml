@@ -12,13 +12,13 @@ module Make
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command_input := C.t)
+             and type command := C.t)
     (Ac : Action.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command_input := C.t) =
+             and type command := C.t) =
 struct
   module CommandMap = struct
     module Mp = Map.Make (Int)
