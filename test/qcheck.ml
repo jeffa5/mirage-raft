@@ -11,15 +11,17 @@ let rec zip xs ys =
 module C = struct
   type machine_input = string [@@deriving sexp]
 
-  type t =
+  type input =
     | MachineInput of machine_input
     | AddPeers of int list
     | RemovePeers of int list
   [@@deriving sexp]
+
+  type output = Result of input | NotLeader of int option [@@deriving sexp]
 end
 
 module P = struct
-  type command = C.t [@@deriving sexp]
+  type command = C.input [@@deriving sexp]
 
   type entry = { term : int; command : command } [@@deriving make, sexp]
 

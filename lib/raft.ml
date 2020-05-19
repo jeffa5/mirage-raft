@@ -4,7 +4,7 @@ module Make
     (Time : Mirage_time.S)
     (Random : Mirage_random.S)
     (C : Command.S)
-    (P : Plog.S with type command := C.t)
+    (P : Plog.S with type command := C.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
     (Rv : Request_vote.S with type address = Ae.address) =
 struct
@@ -21,7 +21,7 @@ struct
     ae_responses : (Ae.args * Ae.res) Lwt_stream.t;
     rv_requests : (Rv.args * Rv.res Lwt_mvar.t) Lwt_stream.t;
     rv_responses : Rv.res Lwt_stream.t;
-    commands : (C.t * C.t option Lwt_mvar.t) Lwt_stream.t;
+    commands : (C.input * C.output Lwt_mvar.t) Lwt_stream.t;
   }
 
   (** timeout is the lower and upper bounds for the election timeout, [lower,upper), in ms

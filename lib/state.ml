@@ -4,7 +4,7 @@ open Asetmap
 
 module Make
     (C : Command.S)
-    (P : Plog.S with type command := C.t)
+    (P : Plog.S with type command := C.input)
     (Ae : Append_entries.S with type plog_entry := P.entry)
     (Rv : Request_vote.S)
     (Ev : Event.S
@@ -12,27 +12,26 @@ module Make
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command := C.t)
+             and type command_input := C.input
+             and type command_output := C.output)
     (Ac : Action.S
             with type ae_args := Ae.args
              and type ae_res := Ae.res
              and type rv_arg := Rv.args
              and type rv_res := Rv.res
-             and type command := C.t) =
+             and type command_output := C.output) =
 struct
   module CommandMap = struct
     module Mp = Map.Make (Int)
     include Mp
 
-    type t = C.t option Lwt_mvar.t Mp.t
+    type t = C.output Lwt_mvar.t Mp.t
 
     let t_of_sexp s =
-      [%of_sexp: (int * (M.input option Lwt_mvar.t[@opaque])) list] s
-      |> Mp.of_list
+      [%of_sexp: (int * (C.output Lwt_mvar.t[@opaque])) list] s |> Mp.of_list
 
     let sexp_of_t t =
-      Mp.to_list t
-      |> [%sexp_of: (int * (M.input option Lwt_mvar.t[@opaque])) list]
+      Mp.to_list t |> [%sexp_of: (int * (C.output Lwt_mvar.t[@opaque])) list]
   end
 
   type stage = Leader | Candidate | Follower [@@deriving sexp]
@@ -177,7 +176,7 @@ struct
             | Some mvar ->
                 let replicating = CommandMap.remove i t.replicating in
                 ( { t with replicating },
-                  Ac.CommandResponse (Some e.command, mvar) :: actions ))
+                  Ac.CommandResponse (Result e.command, mvar) :: actions ))
           (t, []) entries
     else Lwt.return (t, [])
 
@@ -386,9 +385,11 @@ struct
           Lwt.return (t, [])
       else Lwt.return (t, [])
 
-  let handle_command (t : t) ((command, mvar) : C.t * C.t option Lwt_mvar.t) =
+  let handle_command (t : t) ((command, mvar) : C.input * C.output Lwt_mvar.t) =
     match t.stage with
-    | Follower | Candidate -> Lwt.return (t, [ Ac.CommandResponse (None, mvar) ])
+    | Follower | Candidate ->
+        let+ voted_for = P.voted_for t.log in
+        (t, [ Ac.CommandResponse (C.NotLeader voted_for, mvar) ])
     | Leader ->
         let* term = P.current_term t.log in
         let* last_log_index, _ = get_last_entry t.log in
