@@ -4,8 +4,8 @@ module type S = sig
   include Mirage_raft.Plog.S
 end
 
-module Make (M : Mirage_raft.Machine.S) : S with type command = M.input = struct
-  type command = M.input [@@deriving sexp]
+module Make (C : Mirage_raft.Command.S) : S with type command = C.t = struct
+  type command = C.t [@@deriving sexp]
 
   type entry = { term : int; command : command } [@@deriving make, sexp]
 

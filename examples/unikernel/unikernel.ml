@@ -19,11 +19,11 @@ struct
     let module Con = struct
       let conduit = conduit
     end in
-    let module M = Machine.Make (Server) in
-    let module P = Plog.Make (M) in
+    let module C = Command.Make (Server) in
+    let module P = Plog.Make (C) in
     let module Ae = Append_entries.Make (T) (P) (Server) (Con) in
     let module Rv = Request_votes.Make (Server) (Con) in
-    let module R = Mirage_raft.Raft.Make (T) (Rand) (M) (P) (Ae) (Rv) in
+    let module R = Mirage_raft.Raft.Make (T) (Rand) (C) (P) (Ae) (Rv) in
     let server ae_req_push rv_req_push commands_push =
       let open Cohttp in
       let callback _conn req body =
@@ -33,7 +33,7 @@ struct
         | "/request_votes" -> Rv.handle_request rv_req_push body
         | _ ->
             if Astring.String.is_prefix ~affix:"/machine" path then
-              M.handle_request commands_push req body
+              C.handle_request commands_push req body
             else Server.respond_not_found ()
       in
       Server.listen (Server.make ~callback ())
