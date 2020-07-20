@@ -1,8 +1,12 @@
 open Lwt.Syntax
 
+let src = Logs.Src.create "raft"
+
+module L = (val Logs_lwt.src_log src)
+
 module Make
     (Time : Mirage_time.S)
-    (Random : Mirage_random.S)
+    (M : Mirage_clock.MCLOCK)
     (C : Command.S)
     (P : Plog.S with type command := C.input)
     (Ae : Append_entries.S with type plog_entry = P.entry)
@@ -11,6 +15,7 @@ struct
   module Ev = Event.Make (Ae) (Rv) (C)
   module Ac = Action.Make (Ae) (Rv) (C)
   module S = State.Make (C) (P) (Ae) (Rv) (Ev) (Ac)
+  module Rng = Mirage_crypto_rng_mirage.Make (Time) (M)
 
   type t = {
     state : S.t;
@@ -65,8 +70,15 @@ struct
     | Ac.ResetElectionTimeout -> Lwt_mvar.put reset_election_timeout ()
     | Ac.CommandResponse (res, mvar) -> Lwt_mvar.put mvar res
 
+  let id_tag =
+    Logs.Tag.def "id" ~doc:"id" (fun f a ->
+        Format.fprintf f "%s" (string_of_int a))
+
   let handle (t : t) =
-    let* () = Logs_lwt.info (fun f -> f "Starting raft") in
+    let* () =
+      L.info (fun f ->
+          f "Starting raft" ~tags:Logs.Tag.(empty |> add id_tag t.state.id))
+    in
     (* events is the stream where all events come through, i.e.
      * Timeouts
      * Append Entries requests
@@ -94,7 +106,7 @@ struct
           let+ () =
             Time.sleep_ns
               (Duration.of_ms
-                 (lower + Randomconv.int ~bound:(upper - lower) Random.generate))
+                 (lower + Randomconv.int ~bound:(upper - lower) Rng.generate))
           in
           Some (Some Ev.ElectionTimeout)
         in
@@ -198,9 +210,10 @@ struct
     let rec loop (last : S.t) (s : S.t) =
       let* () =
         if last.stage <> s.stage then
-          Logs_lwt.info (fun f ->
+          L.info (fun f ->
               f "State %s"
-                (Sexplib0.Sexp_conv.string_of_sexp @@ S.sexp_of_stage s.stage))
+                (Sexplib0.Sexp_conv.string_of_sexp @@ S.sexp_of_stage s.stage)
+                ~tags:Logs.Tag.(empty |> add id_tag s.id))
         else Lwt.return_unit
       in
       let* event = Lwt_stream.get events in
@@ -208,21 +221,24 @@ struct
       | None -> Lwt.return_unit
       | Some event ->
           let* () =
-            Logs_lwt.debug (fun f ->
+            L.debug (fun f ->
                 f "-> Event"
                   ~tags:
-                    Logs.Tag.(empty |> add event_tag event |> add state_tag s))
+                    Logs.Tag.(
+                      empty |> add event_tag event |> add state_tag s
+                      |> add id_tag s.id))
           in
           let* s', actions = S.handle s event in
           let* () =
             Lwt_list.iter_s
               (fun a ->
                 let* () =
-                  Logs_lwt.debug (fun f ->
+                  L.debug (fun f ->
                       f "<- Action"
                         ~tags:
                           Logs.Tag.(
-                            empty |> add action_tag a |> add state_tag s'))
+                            empty |> add action_tag a |> add state_tag s'
+                            |> add id_tag s'.id))
                 in
                 handle_action t a)
               actions
