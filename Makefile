@@ -1,8 +1,12 @@
+all:
+	dune build @all @runtest
+
 build:
 	dune build
 
 clean:
 	dune clean
+	make -C examples/unikernel clean
 
 install:
 	dune build @install
